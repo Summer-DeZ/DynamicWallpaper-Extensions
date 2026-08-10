@@ -63,7 +63,10 @@ export async function createProjectFolder(context: vscode.ExtensionContext): Pro
   }
 }
 
-export async function applyWallpaper(context: vscode.ExtensionContext): Promise<void> {
+export async function applyWallpaper(
+  context: vscode.ExtensionContext,
+  reloadAutomatically = false
+): Promise<void> {
   try {
     const projectDirectory = getProjectDirectory(context);
     if (!projectDirectory) {
@@ -84,6 +87,11 @@ export async function applyWallpaper(context: vscode.ExtensionContext): Promise<
       } catch (error) {
         gpuWarning = ` 高性能 GPU 设置未成功：${error instanceof Error ? error.message : String(error)}`;
       }
+    }
+
+    if (reloadAutomatically) {
+      await vscode.commands.executeCommand('workbench.action.reloadWindow');
+      return;
     }
 
     const action = await vscode.window.showInformationMessage(

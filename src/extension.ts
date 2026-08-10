@@ -1,9 +1,13 @@
 import * as vscode from 'vscode';
+import { registerConfigurationWatcher } from './application/configurationWatcher';
 import { registerCommands } from './application/registerCommands';
+import { migrateLegacySettings } from './application/settings';
 import { refreshWorkbenchPatch } from './application/workbenchRecovery';
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   registerCommands(context);
+  await migrateLegacySettings();
+  registerConfigurationWatcher(context);
   void refreshWorkbenchPatch(context);
 }
 

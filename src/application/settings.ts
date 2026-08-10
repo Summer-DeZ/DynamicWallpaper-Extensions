@@ -82,6 +82,24 @@ export async function loadConfiguredWallpaperProject(
   };
 }
 
+export async function migrateLegacySettings(): Promise<void> {
+  const settings = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
+  const currentOpacity = settings.inspect<number | null>('wallpaperOpacity');
+  const legacyOpacity = settings.inspect<number>('opacity');
+  const hasCurrentOpacity = currentOpacity?.globalValue !== undefined;
+
+  if (!hasCurrentOpacity && legacyOpacity?.globalValue !== undefined) {
+    await settings.update(
+      'wallpaperOpacity',
+      clamp(legacyOpacity.globalValue, 0, 1),
+      vscode.ConfigurationTarget.Global
+    );
+  }
+  if (legacyOpacity?.globalValue !== undefined) {
+    await settings.update('opacity', undefined, vscode.ConfigurationTarget.Global);
+  }
+}
+
 function optionalNumber(value: number | null): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
