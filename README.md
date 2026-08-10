@@ -37,7 +37,7 @@ Scene 工程会尽可能提取可用媒体，不支持的粒子、脚本和着�
 - 正常禁用或卸载前，请先运行 `Dynamic Wallpaper: 禁用并恢复 Workbench`。
 - `dynamicWallpaper.preferHighPerformanceGpu` 默认为 `true`。
 - `dynamicWallpaper.wallpaperOpacity`（`0–1`）和 `dynamicWallpaper.playbackRate`（`0.25–4`）
-  保存后会自动应用并重载窗口；`null` 表示跟随工程。
+  保存后会提示应用并重载窗口；`null` 表示跟随工程。
 - 壁纸工程格式由 `schemas/wallpaper.schema.json` 描述，相对资源路径以 `wallpaper.json` 所在目录为准。
 
 ## 开发

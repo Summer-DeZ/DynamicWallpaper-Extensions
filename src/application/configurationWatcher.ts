@@ -8,6 +8,8 @@ const RENDERER_SETTINGS = [
   `${CONFIGURATION_SECTION}.playbackRate`
 ] as const;
 
+let promptVisible = false;
+
 export function registerConfigurationWatcher(context: vscode.ExtensionContext): void {
   let timer: NodeJS.Timeout | undefined;
 
@@ -21,8 +23,8 @@ export function registerConfigurationWatcher(context: vscode.ExtensionContext): 
     }
     timer = setTimeout(() => {
       timer = undefined;
-      void applyRendererSettings(context);
-    }, 400);
+      void offerToApplyRendererSettings(context);
+    }, 600);
   });
 
   context.subscriptions.push(listener, {
@@ -34,7 +36,10 @@ export function registerConfigurationWatcher(context: vscode.ExtensionContext): 
   });
 }
 
-async function applyRendererSettings(context: vscode.ExtensionContext): Promise<void> {
+async function offerToApplyRendererSettings(context: vscode.ExtensionContext): Promise<void> {
+  if (promptVisible) {
+    return;
+  }
   if (context.globalState.get<boolean>(STATE_KEYS.workbenchPatchEnabled) === false) {
     return;
   }
@@ -42,5 +47,17 @@ async function applyRendererSettings(context: vscode.ExtensionContext): Promise<
     return;
   }
 
-  await applyWallpaper(context, true);
+  promptVisible = true;
+  try {
+    const action = await vscode.window.showInformationMessage(
+      '动态壁纸设置已更改，需要重新应用并重载 VS Code 窗口后生效。',
+      '应用并重启',
+      '稍后'
+    );
+    if (action === '应用并重启') {
+      await applyWallpaper(context, true);
+    }
+  } finally {
+    promptVisible = false;
+  }
 }

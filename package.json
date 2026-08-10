@@ -2,7 +2,7 @@
   "name": "dynamic-wallpaper-engine",
   "displayName": "Dynamic Wallpaper Renderer",
   "description": "A configurable multi-layer dynamic wallpaper renderer for VS Code.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "Summer-DeZ",
   "author": {
     "name": "Summer-DeZ",
@@ -135,7 +135,7 @@
           "minimum": 0,
           "maximum": 1,
           "default": null,
-          "description": "全局壁纸可见强度。null 跟随 wallpaper.json；0 完全隐藏；1 完全显示。修改后自动应用并重载窗口。"
+          "description": "全局壁纸可见强度。null 跟随 wallpaper.json；0 完全隐藏；1 完全显示。修改后会提示应用并重载窗口。"
         },
         "dynamicWallpaper.playbackRate": {
           "type": [
@@ -145,7 +145,7 @@
           "minimum": 0.25,
           "maximum": 4,
           "default": null,
-          "description": "全局视频播放速度。null 跟随 wallpaper.json；有效范围为 0.25–4。修改后自动应用并重载窗口。"
+          "description": "全局视频播放速度。null 跟随 wallpaper.json；有效范围为 0.25–4。修改后会提示应用并重载窗口。"
         },
         "dynamicWallpaper.preferHighPerformanceGpu": {
           "type": "boolean",
