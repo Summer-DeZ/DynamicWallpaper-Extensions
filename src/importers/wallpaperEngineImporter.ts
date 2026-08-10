@@ -71,6 +71,11 @@ interface SceneMediaLayer {
   effects: string[];
 }
 
+interface SceneTextureConversion {
+  convert(textureFile: string): Promise<void>;
+  failures: Set<string>;
+}
+
 export async function importWallpaperEngineProject(
   options: WallpaperEngineImportOptions
 ): Promise<WallpaperEngineImportResult> {
@@ -256,13 +261,18 @@ async function convertSceneProject(
     throw new WallpaperEngineImportError('RePKG 已完成，但没有找到 scene.json。');
   }
   reportProgress(options, 'convert', '正在提取可直接渲染的 Scene 媒体图层…', 35);
-  const outcome = await convertExtractedWallpaperEngineScene({
-    title: project.title,
-    workshopId: project.workshopid,
-    sceneFile: extractedScene,
+  const textureConversion = createSceneTextureConversion(
+    repkgExecutable,
     extractedDirectory,
-    outputDirectory: stagingDirectory
-  });
+    options
+  );
+  const outcome = await convertBestEffortScene(
+    project,
+    extractedScene,
+    extractedDirectory,
+    stagingDirectory,
+    textureConversion
+  );
   await fs.rm(extractedDirectory, { recursive: true, force: true });
   return outcome;
 }
@@ -271,7 +281,8 @@ async function convertBestEffortScene(
   project: WallpaperEngineProject,
   sceneFile: string,
   extractedDirectory: string,
-  stagingDirectory: string
+  stagingDirectory: string,
+  textureConversion?: SceneTextureConversion
 ): Promise<ConversionOutcome> {
   const scene = await readJsonObject(sceneFile);
   const objects = Array.isArray(scene.objects)
@@ -315,7 +326,11 @@ async function convertBestEffortScene(
       continue;
     }
 
-    const sourceFile = await resolveSceneObjectMedia(extractedDirectory, object.image);
+    const sourceFile = await resolveSceneObjectMedia(
+      extractedDirectory,
+      object.image,
+      textureConversion
+    );
     if (!sourceFile) {
       incrementCount(ignoredKinds, '无法解析媒体的图像对象');
       continue;
@@ -350,7 +365,10 @@ async function convertBestEffortScene(
   if (candidates.length === 0) {
     throw new WallpaperEngineImportError(
       'Scene 已成功解包，但没有找到可由当前渲染器直接使用的图片或视频图层。',
-      summarizeIgnored(ignoredKinds, ignoredEffects)
+      [
+        ...summarizeIgnored(ignoredKinds, ignoredEffects),
+        ...summarizeTextureFailures(textureConversion)
+      ]
     );
   }
 
@@ -393,6 +411,7 @@ async function convertBestEffortScene(
   const warnings = [
     `已保留 ${selected.length} 个可直接渲染的 Scene 媒体图层：${selected.map(item => item.objectName).join('、')}。`,
     ...summarizeIgnored(ignoredKinds, ignoredEffects),
+    ...summarizeTextureFailures(textureConversion),
     '这是尽可能转换模式：不支持的对象与效果已忽略，不会阻止其余内容加载。',
     '原 Wallpaper Engine 素材版权不因转换而改变；发布前请确认原作者授权。'
   ];
@@ -484,7 +503,8 @@ async function runRePkg(
   executable: string,
   packageFile: string,
   outputDirectory: string,
-  options: WallpaperEngineImportOptions
+  options: WallpaperEngineImportOptions,
+  disableTextureConversion = true
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let child: ChildProcess | undefined;
@@ -505,10 +525,15 @@ async function runRePkg(
       }
     }, 100);
 
+    const args = ['extract', '--output', outputDirectory, '--overwrite'];
+    if (disableTextureConversion) {
+      args.push('--no-tex-convert');
+    }
+    args.push(packageFile);
     child = execFile(
       executable,
-      ['extract', '--output', outputDirectory, '--overwrite', packageFile],
-      { windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+      args,
+      { windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
       (error, _stdout, processStderr) => {
         stderr += processStderr;
         if (error) {
@@ -521,9 +546,6 @@ async function runRePkg(
         finish();
       }
     );
-    child.stderr?.on('data', chunk => {
-      stderr += String(chunk);
-    });
     child.on('error', error => finish(error));
   });
 }
@@ -547,7 +569,8 @@ async function findFile(directory: string, filename: string): Promise<string | u
 
 async function resolveSceneObjectMedia(
   extractedDirectory: string,
-  modelReference: string
+  modelReference: string,
+  textureConversion?: SceneTextureConversion
 ): Promise<string | undefined> {
   const modelFile = safeExtractedPath(extractedDirectory, modelReference);
   const modelStat = await statOrUndefined(modelFile);
@@ -576,21 +599,108 @@ async function resolveSceneObjectMedia(
     ];
     for (const directCandidate of directCandidates) {
       const directExtension = path.extname(directCandidate).toLowerCase();
-      if (
-        (VIDEO_EXTENSIONS.has(directExtension) || IMAGE_EXTENSIONS.has(directExtension))
-        && (await statOrUndefined(directCandidate))?.isFile()
-      ) {
-        return directCandidate;
+      const mediaBase = directExtension === '.tex'
+        ? directCandidate.slice(0, -directExtension.length)
+        : directCandidate;
+      const existingMedia = await findRenderableMedia(mediaBase);
+      if (existingMedia) {
+        return existingMedia;
       }
-      for (const extension of [...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]) {
-        const candidate = `${directCandidate}${extension}`;
-        if ((await statOrUndefined(candidate))?.isFile()) {
-          return candidate;
+
+      const textureFile = directExtension === '.tex'
+        ? directCandidate
+        : `${directCandidate}.tex`;
+      if (
+        textureConversion
+        && (await statOrUndefined(textureFile))?.isFile()
+      ) {
+        await textureConversion.convert(textureFile);
+        const convertedMedia = await findRenderableMedia(mediaBase);
+        if (convertedMedia) {
+          return convertedMedia;
         }
       }
     }
   }
   return undefined;
+}
+
+async function findRenderableMedia(baseFile: string): Promise<string | undefined> {
+  const directExtension = path.extname(baseFile).toLowerCase();
+  if (
+    (VIDEO_EXTENSIONS.has(directExtension) || IMAGE_EXTENSIONS.has(directExtension))
+    && (await statOrUndefined(baseFile))?.isFile()
+  ) {
+    return baseFile;
+  }
+  for (const extension of [...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]) {
+    const candidate = `${baseFile}${extension}`;
+    if ((await statOrUndefined(candidate))?.isFile()) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function createSceneTextureConversion(
+  executable: string,
+  extractedDirectory: string,
+  options: WallpaperEngineImportOptions
+): SceneTextureConversion {
+  const conversions = new Map<string, Promise<void>>();
+  const failures = new Set<string>();
+  return {
+    failures,
+    async convert(textureFile: string): Promise<void> {
+      const resolvedTexture = path.resolve(textureFile);
+      let conversion = conversions.get(resolvedTexture);
+      if (!conversion) {
+        conversion = (async () => {
+          checkCancellation(options);
+          reportProgress(
+            options,
+            'convert',
+            `正在转换 Scene 主体纹理：${path.basename(resolvedTexture)}`
+          );
+          try {
+            await runRePkgTexture(executable, resolvedTexture, options);
+          } catch (error) {
+            if (options.isCancellationRequested?.()) {
+              throw error;
+            }
+            failures.add(path.relative(extractedDirectory, resolvedTexture));
+          }
+        })();
+        conversions.set(resolvedTexture, conversion);
+      }
+      await conversion;
+    }
+  };
+}
+
+async function runRePkgTexture(
+  executable: string,
+  textureFile: string,
+  options: WallpaperEngineImportOptions
+): Promise<void> {
+  await runRePkg(
+    executable,
+    textureFile,
+    path.dirname(textureFile),
+    options,
+    false
+  );
+}
+
+function summarizeTextureFailures(
+  textureConversion?: SceneTextureConversion
+): string[] {
+  if (!textureConversion || textureConversion.failures.size === 0) {
+    return [];
+  }
+  return [
+    `RePKG 无法转换 ${textureConversion.failures.size} 个候选纹理，已跳过：${[...textureConversion.failures].join('、')}`
+  ];
 }
 
 function safeExtractedPath(extractedDirectory: string, relativePath: string): string {
