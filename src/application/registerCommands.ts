@@ -4,7 +4,6 @@ import {
   configureHighPerformanceGpu,
   configureSystemGpuPreference
 } from './commands/gpuCommands';
-import { selectPerformanceProfile } from './commands/performanceCommand';
 import {
   applyWallpaper,
   createProjectFolder,
@@ -45,7 +44,6 @@ export function registerCommands(context: vscode.ExtensionContext): void {
       COMMANDS.deleteImportedWallpaper,
       () => deleteImportedWallpaper(context)
     ),
-    vscode.commands.registerCommand(COMMANDS.selectPerformanceProfile, selectPerformanceProfile),
     vscode.commands.registerCommand(COMMANDS.apply, () => applyWallpaper(context)),
     vscode.commands.registerCommand(COMMANDS.restore, () => restoreWorkbench(context)),
     vscode.commands.registerCommand(

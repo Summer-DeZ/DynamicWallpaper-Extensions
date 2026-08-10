@@ -53,7 +53,6 @@
     "onCommand:dynamicWallpaper.openWallpaperLibrary",
     "onCommand:dynamicWallpaper.exportImportedWallpaper",
     "onCommand:dynamicWallpaper.deleteImportedWallpaper",
-    "onCommand:dynamicWallpaper.selectPerformanceProfile",
     "onCommand:dynamicWallpaper.apply",
     "onCommand:dynamicWallpaper.restore",
     "onCommand:dynamicWallpaper.preferHighPerformanceGpu",
@@ -89,10 +88,6 @@
       {
         "command": "dynamicWallpaper.deleteImportedWallpaper",
         "title": "Dynamic Wallpaper: 删除已导入壁纸"
-      },
-      {
-        "command": "dynamicWallpaper.selectPerformanceProfile",
-        "title": "Dynamic Wallpaper: 选择画质档位"
       },
       {
         "command": "dynamicWallpaper.apply",
@@ -131,23 +126,6 @@
           "default": "",
           "scope": "machine",
           "description": "导入壁纸的自定义库目录，必须是绝对路径。留空时使用扩展的 globalStorageUri。"
-        },
-        "dynamicWallpaper.performanceProfile": {
-          "type": "string",
-          "enum": [
-            "project",
-            "quality",
-            "balanced",
-            "economy"
-          ],
-          "enumDescriptions": [
-            "使用 wallpaper.json 中的 performance.profile。",
-            "强制使用最高质量媒体并保留全部渲染效果。",
-            "强制使用均衡媒体并减少部分持续渲染开销。",
-            "强制使用低负载媒体并禁用高成本效果。"
-          ],
-          "default": "project",
-          "description": "全局画质档位；非 project 值会覆盖壁纸工程配置。"
         },
         "dynamicWallpaper.wallpaperOpacity": {
           "type": [

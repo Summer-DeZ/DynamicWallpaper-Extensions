@@ -16,7 +16,6 @@ export const COMMANDS = {
   openWallpaperLibrary: 'dynamicWallpaper.openWallpaperLibrary',
   exportImportedWallpaper: 'dynamicWallpaper.exportImportedWallpaper',
   deleteImportedWallpaper: 'dynamicWallpaper.deleteImportedWallpaper',
-  selectPerformanceProfile: 'dynamicWallpaper.selectPerformanceProfile',
   apply: 'dynamicWallpaper.apply',
   restore: 'dynamicWallpaper.restore',
   preferHighPerformanceGpu: 'dynamicWallpaper.preferHighPerformanceGpu',

@@ -42,8 +42,7 @@ const SUPPORTED_BLEND_MODES = new Set([
 const SUPPORTED_FIT = new Set(['cover', 'contain', 'fill', 'none', 'scale-down']);
 
 export async function loadWallpaperProject(
-  projectFile: string,
-  profileOverride?: RendererPerformance['profile']
+  projectFile: string
 ): Promise<RendererConfiguration> {
   const rawText = await fs.readFile(projectFile, 'utf8');
   let raw: RawProject;
@@ -65,11 +64,7 @@ export async function loadWallpaperProject(
 
   const projectDirectory = path.dirname(path.resolve(projectFile));
   const render = asObject(raw.render);
-  const projectPerformance = normalizePerformance(asObject(raw.performance));
-  const performance: RendererPerformance = {
-    ...projectPerformance,
-    profile: profileOverride ?? projectPerformance.profile
-  };
+  const performance = normalizePerformance(asObject(raw.performance));
   const effects = asObject(raw.effects);
   const layers = await Promise.all(
     raw.layers.map((layer, index) =>

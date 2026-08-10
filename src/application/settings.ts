@@ -1,12 +1,10 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { RendererConfiguration, RendererPerformance } from '../domain/renderer';
+import { RendererConfiguration } from '../domain/renderer';
 import { loadWallpaperProject } from '../project/wallpaperProject';
 import { managedWallpaperDirectory } from '../project/wallpaperLibrary';
 import { CONFIGURATION_SECTION, PROJECT_FILE_NAME, STATE_KEYS } from './constants';
 import { getWallpaperLibraryDirectory } from './libraryStorage';
-
-type PerformanceProfileSetting = RendererPerformance['profile'] | 'project';
 
 export function getProjectDirectory(context: vscode.ExtensionContext): string {
   const managedWallpaperId = getActiveManagedWallpaperId(context);
@@ -63,14 +61,7 @@ export async function loadConfiguredWallpaperProject(
   projectFile: string
 ): Promise<RendererConfiguration> {
   const settings = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
-  const performanceProfile = settings.get<PerformanceProfileSetting>(
-    'performanceProfile',
-    'project'
-  );
-  const project = await loadWallpaperProject(
-    projectFile,
-    performanceProfile === 'project' ? undefined : performanceProfile
-  );
+  const project = await loadWallpaperProject(projectFile);
   const wallpaperOpacity = optionalNumber(
     settings.get<number | null>('wallpaperOpacity', null)
   );
