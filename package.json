@@ -2,7 +2,7 @@
   "name": "dynamic-wallpaper-engine",
   "displayName": "Dynamic Wallpaper Renderer",
   "description": "A configurable multi-layer dynamic wallpaper renderer for VS Code.",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "publisher": "Summer-DeZ",
   "author": {
     "name": "Summer-DeZ",

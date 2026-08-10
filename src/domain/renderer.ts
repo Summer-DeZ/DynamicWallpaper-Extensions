@@ -1,4 +1,52 @@
-export type RendererLayerType = 'video' | 'image' | 'web' | 'gradient';
+export type RendererLayerType = 'video' | 'image' | 'web' | 'gradient' | 'particle';
+
+export type LayerMotionType =
+  | 'none'
+  | 'sway'
+  | 'water'
+  | 'float'
+  | 'pulse'
+  | 'shake'
+  | 'drift';
+
+export interface LayerLayout {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface LayerMotion {
+  type: LayerMotionType;
+  duration: number;
+  intensity: number;
+  delay: number;
+}
+
+export interface ParticleSettings {
+  preset: 'ambient' | 'embers' | 'fog' | 'rain' | 'snow' | 'stars';
+  emitterShape: 'viewport' | 'point' | 'box' | 'sphere';
+  emitterX: number;
+  emitterY: number;
+  emitterWidth: number;
+  emitterHeight: number;
+  maxCount: number;
+  spawnRate: number;
+  lifetimeMin: number;
+  lifetimeMax: number;
+  sizeMin: number;
+  sizeMax: number;
+  speedMin: number;
+  speedMax: number;
+  directionX: number;
+  directionY: number;
+  spread: number;
+  opacityMin: number;
+  opacityMax: number;
+  colors: string[];
+  trail: boolean;
+  turbulence: number;
+}
 
 export interface LayerFilters {
   blur: number;
@@ -27,6 +75,9 @@ export interface RendererLayer {
   filters: LayerFilters;
   muted: boolean;
   playbackRate: number;
+  layout?: LayerLayout;
+  motion: LayerMotion;
+  particle?: ParticleSettings;
 }
 
 export interface RendererEffects {
@@ -48,6 +99,10 @@ export interface RendererConfiguration {
   backgroundColor: string;
   pauseWhenUnfocused: boolean;
   opaqueEditorForMedia: boolean;
+  sceneCanvas?: {
+    width: number;
+    height: number;
+  };
   performance: RendererPerformance;
   layers: RendererLayer[];
   effects: RendererEffects;

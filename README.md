@@ -15,8 +15,9 @@
    - `Dynamic Wallpaper: 创建示例壁纸工程`：创建一个渐变示例。
 3. 运行 `Dynamic Wallpaper: 应用并重启`。
 
-支持视频、图片、本地 Web 页面和动态渐变。Wallpaper Engine 的 Web、Video 工程可以转换；
-Scene 工程会尽可能提取可用媒体，不支持的粒子、脚本和着色器会记录在转换报告中。
+支持视频、图片、本地 Web 页面和动态渐变。Wallpaper Engine 的 Web、Video 工程可直接转换；
+Scene 会保留图层顺序、父子坐标、常见动效和粒子。Puppet 使用分层动态近似，文字、任意脚本及
+自定义着色器不转换，详情写入转换报告。
 
 ## 壁纸库
 

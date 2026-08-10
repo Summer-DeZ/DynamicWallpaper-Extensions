@@ -213,6 +213,7 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
   const economyMode = config.performance.profile === 'economy';
   const qualityMode = config.performance.profile === 'quality';
   let rendererRoot;
+  let sceneCanvas;
   let suspendTimer = 0;
   let activityCheckTimer = 0;
   let activityPaused = false;
@@ -243,13 +244,22 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
         background: ${isFrontLayer ? 'transparent' : '#000'};
       }
       #\${ROOT_ID} > .dwr-layer,
-      #\${ROOT_ID} > .dwr-effect {
+      #\${ROOT_ID} > .dwr-effect,
+      #\${ROOT_ID} > .dwr-scene-canvas > .dwr-layer {
         position: absolute;
         width: 100%;
         height: 100%;
         inset: 0;
         border: 0;
         pointer-events: none;
+      }
+      #\${ROOT_ID} > .dwr-scene-canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+        overflow: visible;
+        pointer-events: none;
+        transform-origin: 0 0;
       }
       @keyframes dwr-gradient-motion {
         0% { background-position: 0% 50%; }
@@ -263,6 +273,33 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
         75% { transform: translate3d(2%, 2%, 0); }
         100% { transform: translate3d(-1%, -1%, 0); }
       }
+      @keyframes dwr-motion-sway {
+        0%, 100% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y-negative)), 0) var(--dwr-base-transform) rotate(var(--dwr-motion-rotation-negative)); }
+        50% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y)), 0) var(--dwr-base-transform) rotate(var(--dwr-motion-rotation)); }
+      }
+      @keyframes dwr-motion-water {
+        0%, 100% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y-negative)), 0) var(--dwr-base-transform) skewX(var(--dwr-motion-skew-negative)); }
+        50% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y)), 0) var(--dwr-base-transform) skewX(var(--dwr-motion-skew)); }
+      }
+      @keyframes dwr-motion-float {
+        0%, 100% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y-negative)), 0) var(--dwr-base-transform); }
+        50% { transform: translate3d(var(--dwr-parallax-x), calc(var(--dwr-parallax-y) + var(--dwr-motion-y)), 0) var(--dwr-base-transform); }
+      }
+      @keyframes dwr-motion-pulse {
+        0%, 100% { transform: translate3d(var(--dwr-parallax-x), var(--dwr-parallax-y), 0) var(--dwr-base-transform) scale(1); }
+        50% { transform: translate3d(var(--dwr-parallax-x), var(--dwr-parallax-y), 0) var(--dwr-base-transform) scale(var(--dwr-motion-scale)); }
+      }
+      @keyframes dwr-motion-shake {
+        0%, 100% { transform: translate3d(var(--dwr-parallax-x), var(--dwr-parallax-y), 0) var(--dwr-base-transform); }
+        20% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x-negative)), calc(var(--dwr-parallax-y) + var(--dwr-motion-y)), 0) var(--dwr-base-transform); }
+        40% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x)), calc(var(--dwr-parallax-y) + var(--dwr-motion-y-negative)), 0) var(--dwr-base-transform); }
+        60% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x-negative)), calc(var(--dwr-parallax-y) + var(--dwr-motion-y-negative)), 0) var(--dwr-base-transform); }
+        80% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x)), calc(var(--dwr-parallax-y) + var(--dwr-motion-y)), 0) var(--dwr-base-transform); }
+      }
+      @keyframes dwr-motion-drift {
+        0%, 100% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x-negative)), var(--dwr-parallax-y), 0) var(--dwr-base-transform); }
+        50% { transform: translate3d(calc(var(--dwr-parallax-x) + var(--dwr-motion-x)), var(--dwr-parallax-y), 0) var(--dwr-base-transform); }
+      }
       ${behindWorkbenchCss}
       ${mediaOpaqueCss}
     \`;
@@ -275,9 +312,21 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
       ? 'transparent'
       : config.backgroundColor;
 
+    let layerParent = root;
+    if (config.sceneCanvas) {
+      sceneCanvas = document.createElement('div');
+      sceneCanvas.className = 'dwr-scene-canvas';
+      sceneCanvas.style.width = config.sceneCanvas.width + 'px';
+      sceneCanvas.style.height = config.sceneCanvas.height + 'px';
+      root.appendChild(sceneCanvas);
+      layerParent = sceneCanvas;
+      layoutSceneCanvas();
+      window.addEventListener('resize', layoutSceneCanvas, { passive: true });
+    }
+
     for (const layer of config.layers) {
       const element = createLayer(layer);
-      root.appendChild(element);
+      layerParent.appendChild(element);
     }
     appendEffects(root);
     document.body.prepend(root);
@@ -334,12 +383,26 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
           for (const item of parallaxLayers) {
             const x = pointerX * item.amount;
             const y = pointerY * item.amount;
-            item.element.style.transform =
-              item.baseTransform + ' translate3d(' + x + 'px,' + y + 'px,0)';
+            item.element.style.setProperty('--dwr-parallax-x', x + 'px');
+            item.element.style.setProperty('--dwr-parallax-y', y + 'px');
           }
         });
       }, { passive: true });
     }
+  }
+
+  function layoutSceneCanvas() {
+    if (!sceneCanvas || !config.sceneCanvas) return;
+    const canvasWidth = Math.max(config.sceneCanvas.width, 1);
+    const canvasHeight = Math.max(config.sceneCanvas.height, 1);
+    const scale = Math.max(
+      window.innerWidth / canvasWidth,
+      window.innerHeight / canvasHeight
+    );
+    const left = (window.innerWidth - canvasWidth * scale) / 2;
+    const top = (window.innerHeight - canvasHeight * scale) / 2;
+    sceneCanvas.style.transform =
+      'translate3d(' + left + 'px,' + top + 'px,0) scale(' + scale + ')';
   }
 
   function createLayer(layer) {
@@ -390,6 +453,9 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
         setWebLayerActivity(element, activityPaused);
       });
       mediaEntries.push({ element, source: layer.sourceUri, type: layer.type });
+    } else if (layer.type === 'particle') {
+      element = document.createElement('canvas');
+      startParticleRenderer(element, layer);
     } else {
       element = document.createElement('div');
       element.style.backgroundImage =
@@ -410,15 +476,208 @@ export function buildInjectionScript(configuration: RendererConfiguration): stri
     element.style.objectFit = layer.fit;
     element.style.objectPosition = layer.position;
     element.style.filter = filterString(layer.filters);
+    if (layer.layout) {
+      element.style.inset = 'auto';
+      element.style.left = layer.layout.left + '%';
+      element.style.top = layer.layout.top + '%';
+      element.style.width = layer.layout.width + '%';
+      element.style.height = layer.layout.height + '%';
+      if (layer.type === 'image' || layer.type === 'video') {
+        element.style.objectFit = 'fill';
+      }
+    }
     const transforms = [];
     if (layer.scale !== 1) transforms.push('scale(' + layer.scale + ')');
     if (layer.rotate !== 0) transforms.push('rotate(' + layer.rotate + 'deg)');
-    const baseTransform = transforms.join(' ');
-    if (baseTransform) element.style.transform = baseTransform;
+    const baseTransform = transforms.join(' ') || 'translateZ(0)';
+    element.style.setProperty('--dwr-base-transform', baseTransform);
+    element.style.setProperty('--dwr-parallax-x', '0px');
+    element.style.setProperty('--dwr-parallax-y', '0px');
+    element.style.transform = 'translate3d(var(--dwr-parallax-x), var(--dwr-parallax-y), 0) '
+      + baseTransform;
     if (layer.parallax !== 0 && !economyMode) {
       parallaxLayers.push({ element, amount: layer.parallax, baseTransform });
     }
+    applyLayerMotion(element, layer.motion);
     return element;
+  }
+
+  function applyLayerMotion(element, motion) {
+    if (!motion || motion.type === 'none' || motion.intensity <= 0 || economyMode) return;
+    const intensity = motion.intensity;
+    element.style.setProperty('--dwr-motion-x', intensity + 'px');
+    element.style.setProperty('--dwr-motion-x-negative', -intensity + 'px');
+    element.style.setProperty('--dwr-motion-y', intensity + 'px');
+    element.style.setProperty('--dwr-motion-y-negative', -intensity + 'px');
+    element.style.setProperty('--dwr-motion-rotation', (intensity * 0.08) + 'deg');
+    element.style.setProperty('--dwr-motion-rotation-negative', (-intensity * 0.08) + 'deg');
+    element.style.setProperty('--dwr-motion-skew', (intensity * 0.05) + 'deg');
+    element.style.setProperty('--dwr-motion-skew-negative', (-intensity * 0.05) + 'deg');
+    element.style.setProperty('--dwr-motion-scale', String(1 + intensity / 500));
+    element.style.animation = 'dwr-motion-' + motion.type + ' '
+      + motion.duration + 's ease-in-out ' + motion.delay + 's infinite';
+    element.dataset.dwrAnimated = 'true';
+  }
+
+  function startParticleRenderer(canvas, layer) {
+    const settings = layer.particle;
+    if (!settings) return;
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) return;
+    const particles = [];
+    const sprite = layer.sourceUri ? new Image() : undefined;
+    if (sprite) sprite.src = layer.sourceUri;
+    const countScale = economyMode ? 0.35 : qualityMode ? 1 : 0.7;
+    const maximum = Math.max(1, Math.round(settings.maxCount * countScale));
+    let width = 0;
+    let height = 0;
+    let pixelRatio = 1;
+    let previousTime = performance.now();
+    let spawnBudget = 0;
+
+    function resize() {
+      const nextWidth = Math.max(1, canvas.clientWidth);
+      const nextHeight = Math.max(1, canvas.clientHeight);
+      const nextRatio = qualityMode ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      if (nextWidth === width && nextHeight === height && nextRatio === pixelRatio) return;
+      width = nextWidth;
+      height = nextHeight;
+      pixelRatio = nextRatio;
+      canvas.width = Math.round(width * pixelRatio);
+      canvas.height = Math.round(height * pixelRatio);
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    }
+
+    function randomBetween(minimum, maximumValue) {
+      return minimum + Math.random() * Math.max(0, maximumValue - minimum);
+    }
+
+    function spawnParticle() {
+      const preset = settings.preset;
+      const life = randomBetween(settings.lifetimeMin, settings.lifetimeMax);
+      const scale = width / 1920;
+      const speed = randomBetween(settings.speedMin, settings.speedMax) * scale;
+      const angle = Math.atan2(-settings.directionY, settings.directionX)
+        + randomBetween(-settings.spread, settings.spread);
+      const emitterWidth = settings.emitterWidth * scale;
+      const emitterHeight = settings.emitterHeight * scale;
+      const emitterCenterX = settings.emitterX * width;
+      const emitterCenterY = settings.emitterY * height;
+      let x = emitterCenterX;
+      let y = emitterCenterY;
+      if (settings.emitterShape === 'viewport') {
+        x = Math.random() * width;
+        y = Math.random() * height;
+      } else if (settings.emitterShape === 'box') {
+        x += randomBetween(-emitterWidth / 2, emitterWidth / 2);
+        y += randomBetween(-emitterHeight / 2, emitterHeight / 2);
+      } else if (settings.emitterShape === 'sphere') {
+        const emitterAngle = Math.random() * Math.PI * 2;
+        const emitterRadius = Math.sqrt(Math.random());
+        x += Math.cos(emitterAngle) * emitterWidth * emitterRadius / 2;
+        y += Math.sin(emitterAngle) * emitterHeight * emitterRadius / 2;
+      }
+      let velocityX = Math.cos(angle) * speed;
+      let velocityY = Math.sin(angle) * speed;
+      if (settings.emitterShape === 'viewport' && preset === 'embers') {
+        y = height + 10;
+        velocityX += randomBetween(-12, 12) * scale;
+        velocityY = -Math.max(speed, 15 * scale);
+      } else if (settings.emitterShape === 'viewport' && preset === 'fog') {
+        x = -Math.max(20, settings.sizeMax * scale);
+        velocityX = Math.max(speed, 8 * scale);
+        velocityY *= 0.15;
+      } else if (settings.emitterShape === 'viewport' && preset === 'rain') {
+        y = -20;
+        velocityX = randomBetween(-20, -5) * scale;
+        velocityY = Math.max(speed, 180 * scale);
+      } else if (settings.emitterShape === 'viewport' && preset === 'snow') {
+        y = -20;
+        velocityX = randomBetween(-18, 18) * scale;
+        velocityY = Math.max(speed, 15 * scale);
+      } else if (settings.emitterShape === 'viewport' && preset === 'stars') {
+        x = randomBetween(-width * 0.2, width * 0.8);
+        y = randomBetween(-height * 0.1, height * 0.65);
+        velocityX = Math.max(speed, 80 * scale);
+        velocityY = velocityX * randomBetween(0.2, 0.55);
+      }
+      particles.push({
+        x,
+        y,
+        velocityX,
+        velocityY,
+        age: 0,
+        life,
+        size: randomBetween(settings.sizeMin, settings.sizeMax) * scale,
+        opacity: randomBetween(settings.opacityMin, settings.opacityMax),
+        color: settings.colors[Math.floor(Math.random() * settings.colors.length)],
+        rotation: Math.random() * Math.PI * 2,
+        spin: randomBetween(-0.35, 0.35)
+      });
+    }
+
+    function render(time) {
+      resize();
+      const delta = Math.min(0.05, Math.max(0, (time - previousTime) / 1000));
+      previousTime = time;
+      if (!activityPaused) {
+        context.clearRect(0, 0, width, height);
+        spawnBudget += delta * settings.spawnRate * countScale;
+        while (spawnBudget >= 1 && particles.length < maximum) {
+          spawnParticle();
+          spawnBudget -= 1;
+        }
+        for (let index = particles.length - 1; index >= 0; index--) {
+          const particle = particles[index];
+          particle.age += delta;
+          if (particle.age >= particle.life) {
+            particles.splice(index, 1);
+            continue;
+          }
+          if (settings.turbulence > 0) {
+            const turbulence = settings.turbulence * (width / 1920) * delta;
+            particle.velocityX += randomBetween(-turbulence, turbulence);
+            particle.velocityY += randomBetween(-turbulence, turbulence);
+          }
+          particle.x += particle.velocityX * delta;
+          particle.y += particle.velocityY * delta;
+          particle.rotation += particle.spin * delta;
+          const progress = particle.age / particle.life;
+          const fade = Math.min(1, progress * 6, (1 - progress) * 4);
+          context.save();
+          context.globalAlpha = particle.opacity * Math.max(0, fade);
+          context.translate(particle.x, particle.y);
+          context.rotate(particle.rotation);
+          if (settings.trail || settings.preset === 'rain') {
+            context.strokeStyle = particle.color;
+            context.lineWidth = Math.max(1, particle.size * 0.18);
+            context.beginPath();
+            context.moveTo(-particle.size * 2.5, 0);
+            context.lineTo(particle.size * 0.5, 0);
+            context.stroke();
+          } else if (sprite?.complete && sprite.naturalWidth > 0) {
+            context.drawImage(
+              sprite,
+              -particle.size / 2,
+              -particle.size / 2,
+              particle.size,
+              particle.size
+            );
+          } else {
+            const gradient = context.createRadialGradient(0, 0, 0, 0, 0, particle.size / 2);
+            gradient.addColorStop(0, particle.color);
+            gradient.addColorStop(1, 'transparent');
+            context.fillStyle = gradient;
+            context.beginPath();
+            context.arc(0, 0, particle.size / 2, 0, Math.PI * 2);
+            context.fill();
+          }
+          context.restore();
+        }
+      }
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
   }
 
   function filterString(filters) {

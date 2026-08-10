@@ -2,6 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
   LayerFilters,
+  LayerLayout,
+  LayerMotion,
+  LayerMotionType,
+  ParticleSettings,
   RendererConfiguration,
   RendererEffects,
   RendererLayer,
@@ -58,8 +62,8 @@ export async function loadWallpaperProject(
   if (!Array.isArray(raw.layers) || raw.layers.length === 0) {
     throw new Error('壁纸工程至少需要一个 layers 项。');
   }
-  if (raw.layers.length > 16) {
-    throw new Error('单个壁纸工程最多支持 16 个图层。');
+  if (raw.layers.length > 64) {
+    throw new Error('单个壁纸工程最多支持 64 个图层。');
   }
 
   const projectDirectory = path.dirname(path.resolve(projectFile));
@@ -78,9 +82,21 @@ export async function loadWallpaperProject(
     backgroundColor: colorValue(render.backgroundColor, '#000000'),
     pauseWhenUnfocused: booleanValue(render.pauseWhenUnfocused, true),
     opaqueEditorForMedia: booleanValue(render.opaqueEditorForMedia, true),
+    sceneCanvas: normalizeSceneCanvas(render.sceneCanvas),
     performance,
     layers,
     effects: normalizeEffects(effects)
+  };
+}
+
+function normalizeSceneCanvas(value: unknown): { width: number; height: number } | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const canvas = asObject(value);
+  return {
+    width: numberValue(canvas.width, 1920, 16, 8192),
+    height: numberValue(canvas.height, 1080, 16, 8192)
   };
 }
 
@@ -93,11 +109,11 @@ async function normalizeLayer(
   const layer = asObject(value);
   const type = enumValue<RendererLayerType>(
     layer.type,
-    ['video', 'image', 'web', 'gradient'],
+    ['video', 'image', 'web', 'gradient', 'particle'],
     undefined
   );
   if (!type) {
-    throw new Error(`layers[${index}].type 必须为 video、image、web 或 gradient。`);
+    throw new Error(`layers[${index}].type 必须为 video、image、web、gradient 或 particle。`);
   }
 
   let sourceUri: string | undefined;
@@ -110,6 +126,23 @@ async function normalizeLayer(
     colors = layer.colors.map((color, colorIndex) =>
       colorValue(color, undefined, `layers[${index}].colors[${colorIndex}]`)
     );
+  } else if (type === 'particle') {
+    if (typeof layer.source === 'string' && layer.source.trim()) {
+      const sourcePath = path.isAbsolute(layer.source)
+        ? path.normalize(layer.source)
+        : path.resolve(projectDirectory, layer.source);
+      if (sourceTypeFromPath(sourcePath) !== 'image') {
+        throw new Error(`layers[${index}] 的粒子纹理不是支持的图片格式。`);
+      }
+      try {
+        if (!(await fs.stat(sourcePath)).isFile()) {
+          throw new Error('不是文件');
+        }
+      } catch {
+        throw new Error(`layers[${index}] 的粒子纹理不存在：${sourcePath}`);
+      }
+      sourceUri = toWorkbenchResourceUri(sourcePath);
+    }
   } else {
     const sources = asObject(layer.sources);
     const selectedSource = typeof sources[profile] === 'string'
@@ -169,7 +202,78 @@ async function normalizeLayer(
     parallax: numberValue(layer.parallax, 0, -100, 100),
     filters: normalizeFilters(asObject(layer.filters)),
     muted: booleanValue(layer.muted, true),
-    playbackRate: numberValue(layer.playbackRate, 1, 0.25, 4)
+    playbackRate: numberValue(layer.playbackRate, 1, 0.25, 4),
+    layout: normalizeLayout(layer.layout),
+    motion: normalizeMotion(layer.motion),
+    particle: type === 'particle' ? normalizeParticle(layer.particle) : undefined
+  };
+}
+
+function normalizeLayout(value: unknown): LayerLayout | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const layout = asObject(value);
+  return {
+    left: numberValue(layout.left, 0, -500, 500),
+    top: numberValue(layout.top, 0, -500, 500),
+    width: numberValue(layout.width, 100, 0.01, 1000),
+    height: numberValue(layout.height, 100, 0.01, 1000)
+  };
+}
+
+function normalizeMotion(value: unknown): LayerMotion {
+  const motion = asObject(value);
+  return {
+    type: enumValue<LayerMotionType>(
+      motion.type,
+      ['none', 'sway', 'water', 'float', 'pulse', 'shake', 'drift'],
+      'none'
+    ) ?? 'none',
+    duration: numberValue(motion.duration, 8, 0.25, 300),
+    intensity: numberValue(motion.intensity, 3, 0, 100),
+    delay: numberValue(motion.delay, 0, -300, 300)
+  };
+}
+
+function normalizeParticle(value: unknown): ParticleSettings {
+  const particle = asObject(value);
+  const colors = Array.isArray(particle.colors)
+    ? particle.colors.slice(0, 8).map((color, index) =>
+      colorValue(color, '#ffffff', `particle.colors[${index}]`)
+    )
+    : ['#ffffff'];
+  return {
+    preset: enumValue(
+      particle.preset,
+      ['ambient', 'embers', 'fog', 'rain', 'snow', 'stars'],
+      'ambient'
+    ) ?? 'ambient',
+    emitterShape: enumValue(
+      particle.emitterShape,
+      ['viewport', 'point', 'box', 'sphere'],
+      'viewport'
+    ) ?? 'viewport',
+    emitterX: numberValue(particle.emitterX, 0.5, -5, 5),
+    emitterY: numberValue(particle.emitterY, 0.5, -5, 5),
+    emitterWidth: numberValue(particle.emitterWidth, 1920, 0, 16000),
+    emitterHeight: numberValue(particle.emitterHeight, 1080, 0, 16000),
+    maxCount: Math.round(numberValue(particle.maxCount, 64, 1, 2000)),
+    spawnRate: numberValue(particle.spawnRate, 12, 0.1, 1000),
+    lifetimeMin: numberValue(particle.lifetimeMin, 2, 0.1, 120),
+    lifetimeMax: numberValue(particle.lifetimeMax, 5, 0.1, 120),
+    sizeMin: numberValue(particle.sizeMin, 3, 0.1, 2000),
+    sizeMax: numberValue(particle.sizeMax, 12, 0.1, 4000),
+    speedMin: numberValue(particle.speedMin, 8, 0, 4000),
+    speedMax: numberValue(particle.speedMax, 30, 0, 4000),
+    directionX: numberValue(particle.directionX, 0, -10, 10),
+    directionY: numberValue(particle.directionY, -1, -10, 10),
+    spread: numberValue(particle.spread, 0.6, 0, Math.PI * 2),
+    opacityMin: numberValue(particle.opacityMin, 0.2, 0, 1),
+    opacityMax: numberValue(particle.opacityMax, 0.9, 0, 1),
+    colors: colors.length > 0 ? colors : ['#ffffff'],
+    trail: booleanValue(particle.trail, false),
+    turbulence: numberValue(particle.turbulence, 0, 0, 1000)
   };
 }
 

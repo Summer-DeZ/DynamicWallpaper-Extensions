@@ -16,7 +16,7 @@ if (result.status !== 0) {
   process.exitCode = result.status ?? 1;
 } else {
   const files = result.stdout.split(/\r?\n/).map(file => file.trim()).filter(Boolean);
-  const forbiddenPrefixes = ['wallpapers/', 'tools/wallpaper-engine/'];
+  const forbiddenPrefixes = ['examples/', 'wallpapers/', 'tools/wallpaper-engine/'];
   const forbidden = files.filter(file =>
     forbiddenPrefixes.some(prefix => file.startsWith(prefix))
   );

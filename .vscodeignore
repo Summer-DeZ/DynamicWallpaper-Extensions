@@ -10,6 +10,7 @@ dist/**/*.map
 build/**
 scripts/**
 docs/**
+examples/**
 wallpapers/**
 tools/wallpaper-engine/**
 .tmp/**
