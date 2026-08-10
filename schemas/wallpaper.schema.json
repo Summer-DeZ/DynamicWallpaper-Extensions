@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.dynamic-wallpaper-renderer/schema/wallpaper.json",
+  "title": "Dynamic Wallpaper Renderer Project",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "layers"
+  ],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "壁纸工程格式版本。"
+    },
+    "name": {
+      "type": "string",
+      "description": "壁纸工程名称。"
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "enum": [
+            "front",
+            "behind"
+          ],
+          "default": "front",
+          "description": "front 保证覆盖 Monaco；behind 将 Workbench 表面改为半透明。"
+        },
+        "surfaceOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.72,
+          "description": "front 模式的界面保留强度，或 behind 模式的界面底色不透明度。"
+        },
+        "backgroundColor": {
+          "type": "string",
+          "default": "#000000",
+          "description": "渲染器底色。"
+        },
+        "pauseWhenUnfocused": {
+          "type": "boolean",
+          "default": true,
+          "description": "VS Code 失焦或不可见时暂停视频和内置动画。"
+        },
+        "opaqueEditorForMedia": {
+          "type": "boolean",
+          "default": true,
+          "description": "查看图片、视频或 PDF 文件时，仅让中央编辑器区域恢复为完全不透明。"
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "enum": [
+            "quality",
+            "balanced",
+            "economy"
+          ],
+          "default": "balanced",
+          "description": "quality 保留全部效果；balanced 默认降低持续开销；economy 禁用高成本装饰动画。"
+        },
+        "suspendAfterSeconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 15,
+          "description": "失焦多少秒后卸载视频源并释放解码器，0 表示只暂停、不卸载。"
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/layer"
+      }
+    },
+    "effects": {
+      "$ref": "#/$defs/effects"
+    }
+  },
+  "$defs": {
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blur": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 0
+        },
+        "brightness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 1
+        },
+        "contrast": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 1
+        },
+        "saturation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 1
+        },
+        "hueRotate": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "default": 0
+        },
+        "grayscale": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "video",
+            "image",
+            "web",
+            "gradient"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "description": "相对于 wallpaper.json 的媒体或 HTML 路径，也可以使用绝对路径。"
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "按性能档位选择不同媒体；缺失档位时回退到 source 或其他可用档位。",
+          "properties": {
+            "quality": {
+              "type": "string"
+            },
+            "balanced": {
+              "type": "string"
+            },
+            "economy": {
+              "type": "string"
+            }
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string"
+          }
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "default": 135
+        },
+        "animationDuration": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 20,
+          "description": "渐变完成一次动画的秒数，0 表示静止。"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "darken",
+            "lighten",
+            "color-dodge",
+            "color-burn",
+            "hard-light",
+            "soft-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity"
+          ],
+          "default": "normal"
+        },
+        "fit": {
+          "enum": [
+            "cover",
+            "contain",
+            "fill",
+            "none",
+            "scale-down"
+          ],
+          "default": "cover"
+        },
+        "position": {
+          "type": "string",
+          "default": "center"
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10,
+          "default": 1
+        },
+        "rotate": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "default": 0
+        },
+        "parallax": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 100,
+          "default": 0,
+          "description": "鼠标视差移动的像素范围。"
+        },
+        "filters": {
+          "$ref": "#/$defs/filters"
+        },
+        "muted": {
+          "type": "boolean",
+          "default": true
+        },
+        "playbackRate": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4,
+          "default": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "video",
+                  "image",
+                  "web"
+                ]
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "source"
+                ]
+              },
+              {
+                "required": [
+                  "sources"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "gradient"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "colors"
+            ]
+          }
+        }
+      ]
+    },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "overlayColor": {
+          "type": "string"
+        },
+        "overlayOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "vignette": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "grain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "scanlines": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      }
+    }
+  }
+}

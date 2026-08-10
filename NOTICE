@@ -1,0 +1,22 @@
+Dynamic Wallpaper Renderer
+Copyright (c) 2026 Dynamic Wallpaper Renderer contributors
+
+This project is licensed under the GNU General Public License version 2 only.
+
+Wallpaper Engine scene compatibility work references and ports portions of:
+Open Wallpaper Engine
+https://github.com/waywallen/open-wallpaper-engine
+Copyright its respective contributors
+Licensed under GPL-2.0
+
+The VSIX bundles RePKG 0.4.0:
+https://github.com/notscuffed/repkg
+Copyright its respective contributors
+Licensed under the MIT License. The RePKG license and complete dependency
+notices are distributed at tools/repkg/LICENSE-RePKG.txt and
+tools/repkg/THIRD-PARTY-NOTICES.txt.
+
+The Wallpaper Engine workshop assets under wallpapers/imagine-2935770445 are
+not relicensed by this repository. Their copyright remains with their
+respective creators and they must only be redistributed when the asset
+license permits it.

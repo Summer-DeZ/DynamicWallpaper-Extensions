@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build and package outputs
+dist/
+build/
+*.vsix
+*.log
+
+# Tests and generated test data
+/test/
+.tmp/
+coverage/
+test-results/
+.nyc_output/
+*.lcov
+
+# Local editor and agent state
+.vscode/
+.idea/
+.agents/
+.codex/
+
+# Local wallpaper sources and generated rendering content
+wallpapers/
+tools/wallpaper-engine/templates/
+
+# Operating-system files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+.git/**
+.gitignore
+.vscode/**
+.agents/**
+.codex/**
+src/**
+tsconfig.json
+node_modules/.cache/**
+dist/**/*.map
+build/**
+scripts/**
+docs/**
+wallpapers/**
+tools/wallpaper-engine/**
+.tmp/**
+*.log
