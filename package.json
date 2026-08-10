@@ -150,18 +150,24 @@
           "description": "全局画质档位；非 project 值会覆盖壁纸工程配置。"
         },
         "dynamicWallpaper.wallpaperOpacity": {
-          "type": "number",
-          "minimum": -1,
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
           "maximum": 1,
-          "default": -1,
-          "description": "全局壁纸可见强度。-1 跟随 wallpaper.json；0 完全隐藏；1 完全显示。修改后需重新应用并重启。"
+          "default": null,
+          "description": "全局壁纸可见强度。null 跟随 wallpaper.json；0 完全隐藏；1 完全显示。修改后需重新应用并重启。"
         },
         "dynamicWallpaper.playbackRate": {
-          "type": "number",
-          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0.25,
           "maximum": 4,
-          "default": 0,
-          "description": "全局视频播放速度。0 跟随 wallpaper.json；有效覆盖范围为 0.25–4。修改后需重新应用并重启。"
+          "default": null,
+          "description": "全局视频播放速度。null 跟随 wallpaper.json；有效范围为 0.25–4。修改后需重新应用并重启。"
         },
         "dynamicWallpaper.preferHighPerformanceGpu": {
           "type": "boolean",

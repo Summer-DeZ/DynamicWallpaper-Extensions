@@ -36,8 +36,8 @@ Scene 工程会尽可能提取可用媒体，不支持的粒子、脚本和着�
 - 打开图片、视频或 PDF 时，编辑器区域默认恢复为不透明，避免内容与壁纸重叠。
 - 正常禁用或卸载前，请先运行 `Dynamic Wallpaper: 禁用并恢复 Workbench`。
 - `dynamicWallpaper.preferHighPerformanceGpu` 默认为 `true`。
-- `dynamicWallpaper.wallpaperOpacity` 可覆盖壁纸透明度，`-1` 表示跟随工程。
-- `dynamicWallpaper.playbackRate` 可覆盖视频速度，`0` 表示跟随工程。
+- `dynamicWallpaper.wallpaperOpacity` 可在 `0–1` 之间覆盖壁纸透明度，`null` 表示跟随工程。
+- `dynamicWallpaper.playbackRate` 可在 `0.25–4` 之间覆盖视频速度，`null` 表示跟随工程。
 - 壁纸工程格式由 `schemas/wallpaper.schema.json` 描述，相对资源路径以 `wallpaper.json` 所在目录为准。
 
 ## 开发

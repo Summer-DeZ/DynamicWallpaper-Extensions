@@ -71,15 +71,19 @@ export async function loadConfiguredWallpaperProject(
     projectFile,
     performanceProfile === 'project' ? undefined : performanceProfile
   );
-  const wallpaperOpacity = finiteNumber(settings.get<number>('wallpaperOpacity', -1), -1);
-  const playbackRate = finiteNumber(settings.get<number>('playbackRate', 0), 0);
+  const wallpaperOpacity = optionalNumber(
+    settings.get<number | null>('wallpaperOpacity', null)
+  );
+  const playbackRate = optionalNumber(
+    settings.get<number | null>('playbackRate', null)
+  );
 
   return {
     ...project,
-    surfaceOpacity: wallpaperOpacity >= 0
+    surfaceOpacity: wallpaperOpacity !== undefined
       ? 1 - clamp(wallpaperOpacity, 0, 1)
       : project.surfaceOpacity,
-    layers: playbackRate > 0
+    layers: playbackRate !== undefined
       ? project.layers.map(layer => layer.type === 'video'
         ? { ...layer, playbackRate: clamp(playbackRate, 0.25, 4) }
         : layer)
@@ -87,8 +91,8 @@ export async function loadConfiguredWallpaperProject(
   };
 }
 
-function finiteNumber(value: number, fallback: number): number {
-  return Number.isFinite(value) ? value : fallback;
+function optionalNumber(value: number | null): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
