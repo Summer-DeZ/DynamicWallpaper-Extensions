@@ -21,7 +21,6 @@ async function main() {
       'package',
       '--target',
       'win32-x64',
-      '--allow-missing-repository',
       '--out',
       outputFile
     ],

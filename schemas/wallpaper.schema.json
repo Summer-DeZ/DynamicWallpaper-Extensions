@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://local.dynamic-wallpaper-renderer/schema/wallpaper.json",
+  "$id": "https://raw.githubusercontent.com/Summer-DeZ/DynamicWallpaper-Extensions/main/schemas/wallpaper.schema.json",
   "title": "Dynamic Wallpaper Renderer Project",
   "type": "object",
   "additionalProperties": false,

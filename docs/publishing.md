@@ -24,9 +24,9 @@ RePKG MIT license and third-party notices in the VSIX.
 
 Before packaging the public candidate:
 
-- create a Visual Studio Marketplace publisher and replace `publisher: "local"` with its immutable ID;
+- keep the immutable Marketplace publisher ID `Summer-DeZ` aligned with the extension manifest;
 - confirm that both `name` and `displayName` are available;
-- add `author`, `repository`, `homepage`, and `bugs` metadata;
+- keep `author`, `repository`, `homepage`, and `bugs` metadata accurate;
 - add a non-SVG PNG icon of at least 128x128 pixels, preferably 256x256;
 - add screenshots showing the editor, media/PDF protection, and recovery after a VS Code update;
 - add `SUPPORT.md` and a security-reporting contact.
