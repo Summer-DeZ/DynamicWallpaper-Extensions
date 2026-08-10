@@ -62,8 +62,35 @@ export async function clearProjectSelection(context: vscode.ExtensionContext): P
 export async function loadConfiguredWallpaperProject(
   projectFile: string
 ): Promise<RendererConfiguration> {
-  const setting = vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .get<PerformanceProfileSetting>('performanceProfile', 'project');
-  return loadWallpaperProject(projectFile, setting === 'project' ? undefined : setting);
+  const settings = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
+  const performanceProfile = settings.get<PerformanceProfileSetting>(
+    'performanceProfile',
+    'project'
+  );
+  const project = await loadWallpaperProject(
+    projectFile,
+    performanceProfile === 'project' ? undefined : performanceProfile
+  );
+  const wallpaperOpacity = finiteNumber(settings.get<number>('wallpaperOpacity', -1), -1);
+  const playbackRate = finiteNumber(settings.get<number>('playbackRate', 0), 0);
+
+  return {
+    ...project,
+    surfaceOpacity: wallpaperOpacity >= 0
+      ? 1 - clamp(wallpaperOpacity, 0, 1)
+      : project.surfaceOpacity,
+    layers: playbackRate > 0
+      ? project.layers.map(layer => layer.type === 'video'
+        ? { ...layer, playbackRate: clamp(playbackRate, 0.25, 4) }
+        : layer)
+      : project.layers
+  };
+}
+
+function finiteNumber(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }

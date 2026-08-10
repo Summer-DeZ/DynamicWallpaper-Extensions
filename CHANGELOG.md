@@ -2,6 +2,7 @@
 
 ## 0.6.0
 
+- 新增全局壁纸可见强度和视频播放速度设置，默认跟随工程且不修改原始 `wallpaper.json`
 - Wallpaper Engine 导入结果默认写入扩展 `globalStorageUri` 下的受管壁纸库，不再写到 Steam 源工程旁边
 - 以 Workshop ID 或标题与源路径哈希生成稳定且防冲突的库条目 ID，并用 `library.json` 记录本地索引
 - 当前受管壁纸只在扩展全局状态中保存条目 ID，所有本机路径配置均声明为 machine scope
