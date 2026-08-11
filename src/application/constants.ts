@@ -2,8 +2,10 @@ export const CONFIGURATION_SECTION = 'dynamicWallpaper';
 export const PROJECT_FILE_NAME = 'wallpaper.json';
 
 export const STATE_KEYS = {
+  projectSelection: 'dynamicWallpaper.projectSelection',
   activeManagedWallpaperId: 'dynamicWallpaper.activeManagedWallpaperId',
   externalProjectDirectory: 'dynamicWallpaper.externalProjectDirectory',
+  wallpaperLibraryDirectory: 'dynamicWallpaper.wallpaperLibraryDirectory',
   gpuPreviousValue: 'dynamicWallpaper.gpuPreviousValue',
   gpuExecutable: 'dynamicWallpaper.gpuExecutable',
   workbenchPatchEnabled: 'dynamicWallpaper.workbenchPatchEnabled'
@@ -20,5 +22,8 @@ export const COMMANDS = {
   apply: 'dynamicWallpaper.apply',
   restore: 'dynamicWallpaper.restore',
   preferHighPerformanceGpu: 'dynamicWallpaper.preferHighPerformanceGpu',
-  useSystemGpuPreference: 'dynamicWallpaper.useSystemGpuPreference'
+  useSystemGpuPreference: 'dynamicWallpaper.useSystemGpuPreference',
+  openRuntimeProperties: 'dynamicWallpaper.openRuntimeProperties',
+  openRuntimeDiagnostics: 'dynamicWallpaper.openRuntimeDiagnostics',
+  manageRuntimeNetworkAccess: 'dynamicWallpaper.manageRuntimeNetworkAccess'
 } as const;

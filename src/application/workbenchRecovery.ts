@@ -1,11 +1,15 @@
+import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { decideWorkbenchPatchRecovery } from '../platform/workbench/patchLifecycle';
 import {
   applyWorkbenchPatch,
-  getWorkbenchPatchStatus
+  getWorkbenchPatchStatus,
+  removeWorkbenchPatch
 } from '../platform/workbench/workbenchPatch';
 import { STATE_KEYS } from './constants';
 import {
+  clearProjectSelection,
+  getActiveManagedWallpaperId,
   getProjectDirectory,
   loadConfiguredWallpaperProject,
   projectFileFor
@@ -23,8 +27,15 @@ export async function refreshWorkbenchPatch(context: vscode.ExtensionContext): P
   }
 
   try {
+    const projectFile = projectFileFor(projectDirectory);
+    if (!(await isFile(projectFile))) {
+      await recoverMissingProject(context, projectFile);
+      return;
+    }
+
     const renderConfiguration = await loadConfiguredWallpaperProject(
-      projectFileFor(projectDirectory)
+      projectFile,
+      context
     );
     const status = await getWorkbenchPatchStatus(vscode.env.appRoot, renderConfiguration);
     const recovery = decideWorkbenchPatchRecovery(enabled, status);
@@ -70,4 +81,50 @@ export async function refreshWorkbenchPatch(context: vscode.ExtensionContext): P
       `Dynamic Wallpaper Renderer 无法自动更新现有注入：${message}`
     );
   }
+}
+
+async function recoverMissingProject(
+  context: vscode.ExtensionContext,
+  projectFile: string
+): Promise<void> {
+  const managedWallpaperId = getActiveManagedWallpaperId(context);
+
+  // Selection state lives in VS Code's global state, independently from globalStorage.
+  // If the managed library is deleted manually, retaining this ID would make every
+  // subsequent startup try to open the same path and emit ENOENT again.
+  await clearProjectSelection(context);
+  await context.globalState.update(STATE_KEYS.workbenchPatchEnabled, false);
+
+  try {
+    await removeWorkbenchPatch(vscode.env.appRoot);
+    const action = await vscode.window.showWarningMessage(
+      managedWallpaperId
+        ? `当前壁纸“${managedWallpaperId}”的受管文件已不存在，已清除失效选择并恢复 Workbench。`
+        : `当前壁纸工程已不存在，已清除失效选择并恢复 Workbench：${projectFile}`,
+      '立即重启'
+    );
+    if (action === '立即重启') {
+      await vscode.commands.executeCommand('workbench.action.reloadWindow');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    void vscode.window.showWarningMessage(
+      `当前壁纸工程已不存在，失效选择已清除；但 Workbench 残留注入清理失败：${message}`
+    );
+  }
+}
+
+async function isFile(file: string): Promise<boolean> {
+  try {
+    return (await fs.stat(file)).isFile();
+  } catch (error) {
+    if (isNodeError(error, 'ENOENT') || isNodeError(error, 'ENOTDIR')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === code;
 }

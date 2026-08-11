@@ -4,6 +4,12 @@
 .agents/**
 .codex/**
 src/**
+runtime-src/**
+tests/**
+test-results/**
+playwright-report/**
+playwright.config.ts
+vitest.config.js
 tsconfig.json
 node_modules/.cache/**
 dist/**/*.map

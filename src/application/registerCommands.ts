@@ -17,6 +17,11 @@ import {
   openWallpaperLibrary,
   selectImportedWallpaper
 } from './commands/libraryCommands';
+import {
+  manageRuntimeNetworkAccess,
+  openRuntimeDiagnostics,
+  openRuntimeProperties
+} from './commands/runtimeCommands';
 
 export function registerCommands(context: vscode.ExtensionContext): void {
   const importOutput = vscode.window.createOutputChannel('Dynamic Wallpaper Import');
@@ -44,8 +49,20 @@ export function registerCommands(context: vscode.ExtensionContext): void {
       COMMANDS.deleteImportedWallpaper,
       () => deleteImportedWallpaper(context)
     ),
-    vscode.commands.registerCommand(COMMANDS.apply, () => applyWallpaper(context)),
+    vscode.commands.registerCommand(COMMANDS.apply, () => applyWallpaper(context, true)),
     vscode.commands.registerCommand(COMMANDS.restore, () => restoreWorkbench(context)),
+    vscode.commands.registerCommand(
+      COMMANDS.openRuntimeProperties,
+      () => openRuntimeProperties(context)
+    ),
+    vscode.commands.registerCommand(
+      COMMANDS.openRuntimeDiagnostics,
+      () => openRuntimeDiagnostics(context)
+    ),
+    vscode.commands.registerCommand(
+      COMMANDS.manageRuntimeNetworkAccess,
+      () => manageRuntimeNetworkAccess(context)
+    ),
     vscode.commands.registerCommand(
       COMMANDS.preferHighPerformanceGpu,
       () => configureHighPerformanceGpu(context)

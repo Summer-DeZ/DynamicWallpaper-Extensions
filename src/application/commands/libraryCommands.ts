@@ -2,13 +2,16 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { pathExists } from '../../platform/filesystem';
+import { importWallpaperEngineProject } from '../../importers/wallpaperEngineImporter';
+import { relocateRuntimeProject } from '../../project/relocateRuntimeProject';
 import { removeWorkbenchPatch } from '../../platform/workbench/workbenchPatch';
 import {
   ensureWallpaperLibrary,
   listExistingManagedWallpapers,
   ManagedWallpaperEntry,
   managedWallpaperDirectory,
-  removeManagedWallpaperFromCatalog
+  removeManagedWallpaperFromCatalog,
+  upsertManagedWallpaper
 } from '../../project/wallpaperLibrary';
 import { COMMANDS, STATE_KEYS } from '../constants';
 import { showOperationError } from '../errors';
@@ -16,35 +19,83 @@ import { getWallpaperLibraryDirectory } from '../libraryStorage';
 import {
   clearProjectSelection,
   getActiveManagedWallpaperId,
+  getProjectDirectory,
   loadConfiguredWallpaperProject,
+  selectExternalProject,
   selectManagedWallpaper
 } from '../settings';
+import { applyWallpaper } from './projectCommands';
 
 interface WallpaperQuickPickItem extends vscode.QuickPickItem {
   entry: ManagedWallpaperEntry;
 }
 
-export async function selectImportedWallpaper(context: vscode.ExtensionContext): Promise<void> {
+export async function selectImportedWallpaper(
+  context: vscode.ExtensionContext,
+  wallpaperId?: string
+): Promise<void> {
   try {
-    const selection = await chooseManagedWallpaper(context, '选择一个已导入的壁纸');
+    const selection = await chooseManagedWallpaper(
+      context,
+      '选择后将立即应用壁纸并重载窗口',
+      wallpaperId
+    );
     if (!selection) {
       return;
     }
     const libraryDirectory = getWallpaperLibraryDirectory(context);
     const projectDirectory = managedWallpaperDirectory(libraryDirectory, selection.id);
+    await upgradeLegacyImportedWallpaper(context, libraryDirectory, projectDirectory, selection);
     await loadConfiguredWallpaperProject(path.join(projectDirectory, 'wallpaper.json'));
+
+    const previousManagedWallpaperId = getActiveManagedWallpaperId(context);
+    const previousProjectDirectory = previousManagedWallpaperId
+      ? ''
+      : getProjectDirectory(context);
     await selectManagedWallpaper(context, selection.id);
-    const action = await vscode.window.showInformationMessage(
-      `已选择壁纸“${selection.title}”。`,
-      '应用并重启',
-      '稍后'
-    );
-    if (action === '应用并重启') {
-      await vscode.commands.executeCommand(COMMANDS.apply);
+    const applied = await applyWallpaper(context, true);
+    if (!applied) {
+      await restoreProjectSelection(
+        context,
+        previousManagedWallpaperId,
+        previousProjectDirectory
+      );
     }
   } catch (error) {
     showOperationError('选择已导入壁纸失败', error);
   }
+}
+
+async function upgradeLegacyImportedWallpaper(
+  context: vscode.ExtensionContext,
+  libraryDirectory: string,
+  projectDirectory: string,
+  entry: ManagedWallpaperEntry
+): Promise<void> {
+  const projectFile = path.join(projectDirectory, 'wallpaper.json');
+  const raw = JSON.parse(await fs.readFile(projectFile, 'utf8')) as { version?: number };
+  if (raw.version === 2 || !(await pathExists(path.join(entry.sourceDirectory, 'project.json')))) return;
+  const result = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: `正在将“${entry.title}”无损迁移到 WebGL2 运行时`,
+    cancellable: false
+  }, progress => importWallpaperEngineProject({
+    sourceDirectory: entry.sourceDirectory,
+    outputDirectory: projectDirectory,
+    extensionPath: context.extensionPath,
+    overwrite: true,
+    onProgress: update => progress.report({ message: update.message, increment: update.increment })
+  }));
+  await upsertManagedWallpaper(libraryDirectory, {
+    id: entry.id,
+    title: result.title,
+    sourceType: result.sourceType,
+    sourceDirectory: result.sourceDirectory,
+    runtimeFormatVersion: 1,
+    sourceVersion: entry.sourceVersion,
+    compatibilityStatus: result.warnings.length ? 'partial' : 'compatible',
+    networkHosts: entry.networkHosts
+  });
 }
 
 export async function openWallpaperLibrary(context: vscode.ExtensionContext): Promise<void> {
@@ -100,6 +151,11 @@ export async function exportImportedWallpaper(context: vscode.ExtensionContext):
         errorOnExist: true,
         force: false
       });
+      await relocateRuntimeProject(
+        stagingDirectory,
+        sourceDirectory,
+        destinationDirectory
+      );
       await fs.rename(stagingDirectory, destinationDirectory);
     } finally {
       await fs.rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined);
@@ -157,23 +213,87 @@ export async function deleteImportedWallpaper(context: vscode.ExtensionContext):
 
 async function chooseManagedWallpaper(
   context: vscode.ExtensionContext,
-  placeHolder: string
+  placeHolder: string,
+  wallpaperId?: string
 ): Promise<ManagedWallpaperEntry | undefined> {
   const libraryDirectory = getWallpaperLibraryDirectory(context);
   const wallpapers = await listExistingManagedWallpapers(libraryDirectory);
   if (wallpapers.length === 0) {
-    void vscode.window.showInformationMessage('壁纸库中还没有已导入的壁纸。');
+    const action = await vscode.window.showInformationMessage(
+      '壁纸库中还没有已导入的壁纸。',
+      '导入 Wallpaper Engine 工程'
+    );
+    if (action === '导入 Wallpaper Engine 工程') {
+      await vscode.commands.executeCommand(COMMANDS.importWallpaperEngine);
+    }
     return undefined;
   }
+
+  if (wallpaperId) {
+    const requested = wallpapers.find(entry => entry.id === wallpaperId);
+    if (!requested) {
+      throw new Error(`壁纸库中找不到项目：${wallpaperId}`);
+    }
+    return requested;
+  }
+
   const activeId = getActiveManagedWallpaperId(context);
-  const items: WallpaperQuickPickItem[] = wallpapers.map(entry => ({
-    label: entry.title,
-    description: entry.id === activeId ? '当前壁纸' : entry.sourceType,
-    detail: `来源：${entry.sourceDirectory}`,
+  const orderedWallpapers = [...wallpapers].sort((left, right) => {
+    const activeOrder = Number(right.id === activeId) - Number(left.id === activeId);
+    return activeOrder || left.title.localeCompare(right.title, 'zh-CN');
+  });
+  const items: WallpaperQuickPickItem[] = orderedWallpapers.map(entry => ({
+    label: entry.id === activeId ? `$(check) ${entry.title}` : entry.title,
+    description: [
+      'Wallpaper Engine',
+      sourceTypeLabel(entry.sourceType),
+      compatibilityLabel(entry.compatibilityStatus),
+      entry.id === activeId ? '当前壁纸' : undefined
+    ].filter((value): value is string => Boolean(value)).join(' · '),
+    detail: `ID：${entry.id} · 来源：${entry.sourceDirectory}`,
     entry
   }));
-  const selected = await vscode.window.showQuickPick(items, { placeHolder });
+  const selected = await vscode.window.showQuickPick(items, {
+    title: '浏览并切换壁纸库',
+    placeHolder,
+    matchOnDescription: true,
+    matchOnDetail: true,
+    ignoreFocusOut: true
+  });
   return selected?.entry;
+}
+
+async function restoreProjectSelection(
+  context: vscode.ExtensionContext,
+  managedWallpaperId: string | undefined,
+  externalProjectDirectory: string
+): Promise<void> {
+  if (managedWallpaperId) {
+    await selectManagedWallpaper(context, managedWallpaperId);
+  } else if (externalProjectDirectory) {
+    await selectExternalProject(context, externalProjectDirectory);
+  } else {
+    await clearProjectSelection(context);
+  }
+}
+
+function sourceTypeLabel(sourceType: ManagedWallpaperEntry['sourceType']): string {
+  switch (sourceType) {
+    case 'Scene': return '场景';
+    case 'Web': return '网页';
+    case 'Video': return '视频';
+  }
+}
+
+function compatibilityLabel(
+  status: ManagedWallpaperEntry['compatibilityStatus']
+): string {
+  switch (status) {
+    case 'compatible': return '完全兼容';
+    case 'partial': return '部分兼容';
+    case 'incompatible': return '不兼容';
+    case 'legacy': return '待升级';
+  }
 }
 
 function isSameOrInside(candidate: string, parent: string): boolean {

@@ -5,7 +5,10 @@ import { getProjectDirectory } from './settings';
 
 const RENDERER_SETTINGS = [
   `${CONFIGURATION_SECTION}.wallpaperOpacity`,
-  `${CONFIGURATION_SECTION}.playbackRate`
+  `${CONFIGURATION_SECTION}.playbackRate`,
+  `${CONFIGURATION_SECTION}.maxFps`,
+  `${CONFIGURATION_SECTION}.pauseWhenUnfocused`,
+  `${CONFIGURATION_SECTION}.opaqueEditorFileTypes`
 ] as const;
 
 let promptVisible = false;
