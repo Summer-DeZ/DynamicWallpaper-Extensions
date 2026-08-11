@@ -35,20 +35,6 @@ export interface ManagedWallpaperEntryInput {
   updatedAt?: string;
 }
 
-export function resolveWallpaperLibraryDirectory(
-  globalStorageDirectory: string,
-  configuredDirectory = ''
-): string {
-  const configured = configuredDirectory.trim();
-  if (!configured) {
-    return path.join(path.resolve(globalStorageDirectory), WALLPAPER_LIBRARY_DIRECTORY_NAME);
-  }
-  if (!path.isAbsolute(configured)) {
-    throw new Error('自定义壁纸库目录必须使用绝对路径。');
-  }
-  return path.resolve(configured);
-}
-
 export function createManagedWallpaperId(
   sourceDirectory: string,
   identity: ManagedWallpaperIdentity

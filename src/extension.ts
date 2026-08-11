@@ -6,7 +6,7 @@ import { refreshWorkbenchPatch } from './application/workbenchRecovery';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   registerCommands(context);
-  await migrateLegacySettings();
+  await migrateLegacySettings(context);
   registerConfigurationWatcher(context);
   void refreshWorkbenchPatch(context);
 }

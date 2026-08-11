@@ -3,6 +3,7 @@ export const PROJECT_FILE_NAME = 'wallpaper.json';
 
 export const STATE_KEYS = {
   activeManagedWallpaperId: 'dynamicWallpaper.activeManagedWallpaperId',
+  externalProjectDirectory: 'dynamicWallpaper.externalProjectDirectory',
   gpuPreviousValue: 'dynamicWallpaper.gpuPreviousValue',
   gpuExecutable: 'dynamicWallpaper.gpuExecutable',
   workbenchPatchEnabled: 'dynamicWallpaper.workbenchPatchEnabled'

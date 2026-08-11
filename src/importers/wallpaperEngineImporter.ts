@@ -1,5 +1,6 @@
 import { ChildProcess, execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadWallpaperProject } from '../project/wallpaperProject';
 import {
@@ -298,31 +299,36 @@ async function convertSceneProject(
     );
   }
 
-  const extractedDirectory = path.join(stagingDirectory, '.wallpaper-engine-extracted');
-  await fs.mkdir(extractedDirectory);
-  reportProgress(options, 'extract', '正在使用内置 RePKG 解包 scene.pkg…', 25);
-  await runRePkg(repkgExecutable, packageFile, extractedDirectory, options);
-  checkCancellation(options);
+  // RePKG and some of its .NET dependencies still fail on deeply nested
+  // Windows paths. The managed library path is already long, and package
+  // entries can add another hundred characters, so extraction must not live
+  // below the final wallpaper directory.
+  const extractedDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'dwr-'));
+  try {
+    reportProgress(options, 'extract', '正在使用内置 RePKG 解包 scene.pkg…', 25);
+    await runRePkg(repkgExecutable, packageFile, extractedDirectory, options);
+    checkCancellation(options);
 
-  const extractedScene = await findFile(extractedDirectory, 'scene.json');
-  if (!extractedScene) {
-    throw new WallpaperEngineImportError('RePKG 已完成，但没有找到 scene.json。');
+    const extractedScene = await findFile(extractedDirectory, 'scene.json');
+    if (!extractedScene) {
+      throw new WallpaperEngineImportError('RePKG 已完成，但没有找到 scene.json。');
+    }
+    reportProgress(options, 'convert', '正在解析 Scene 图层、父级变换、效果与粒子…', 35);
+    const textureConversion = createSceneTextureConversion(
+      repkgExecutable,
+      extractedDirectory,
+      options
+    );
+    return await convertLayeredScene(
+      project,
+      extractedScene,
+      extractedDirectory,
+      stagingDirectory,
+      textureConversion
+    );
+  } finally {
+    await fs.rm(extractedDirectory, { recursive: true, force: true }).catch(() => undefined);
   }
-  reportProgress(options, 'convert', '正在解析 Scene 图层、父级变换、效果与粒子…', 35);
-  const textureConversion = createSceneTextureConversion(
-    repkgExecutable,
-    extractedDirectory,
-    options
-  );
-  const outcome = await convertLayeredScene(
-    project,
-    extractedScene,
-    extractedDirectory,
-    stagingDirectory,
-    textureConversion
-  );
-  await fs.rm(extractedDirectory, { recursive: true, force: true });
-  return outcome;
 }
 
 async function convertLayeredScene(

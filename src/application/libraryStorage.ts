@@ -1,10 +1,7 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { resolveWallpaperLibraryDirectory } from '../project/wallpaperLibrary';
-import { CONFIGURATION_SECTION } from './constants';
+import { WALLPAPER_LIBRARY_DIRECTORY_NAME } from '../project/wallpaperLibrary';
 
 export function getWallpaperLibraryDirectory(context: vscode.ExtensionContext): string {
-  const configuredDirectory = vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .get<string>('libraryDirectory', '');
-  return resolveWallpaperLibraryDirectory(context.globalStorageUri.fsPath, configuredDirectory);
+  return path.join(context.globalStorageUri.fsPath, WALLPAPER_LIBRARY_DIRECTORY_NAME);
 }

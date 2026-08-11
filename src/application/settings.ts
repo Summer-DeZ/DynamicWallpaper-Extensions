@@ -14,10 +14,7 @@ export function getProjectDirectory(context: vscode.ExtensionContext): string {
       managedWallpaperId
     );
   }
-  return vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .get<string>('projectDirectory', '')
-    .trim();
+  return context.globalState.get<string>(STATE_KEYS.externalProjectDirectory, '').trim();
 }
 
 export function projectFileFor(projectDirectory: string): string {
@@ -34,9 +31,7 @@ export async function selectExternalProject(
   context: vscode.ExtensionContext,
   projectDirectory: string
 ): Promise<void> {
-  await vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .update('projectDirectory', projectDirectory, vscode.ConfigurationTarget.Global);
+  await context.globalState.update(STATE_KEYS.externalProjectDirectory, projectDirectory);
   await context.globalState.update(STATE_KEYS.activeManagedWallpaperId, undefined);
 }
 
@@ -45,16 +40,12 @@ export async function selectManagedWallpaper(
   wallpaperId: string
 ): Promise<void> {
   await context.globalState.update(STATE_KEYS.activeManagedWallpaperId, wallpaperId);
-  await vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .update('projectDirectory', undefined, vscode.ConfigurationTarget.Global);
+  await context.globalState.update(STATE_KEYS.externalProjectDirectory, undefined);
 }
 
 export async function clearProjectSelection(context: vscode.ExtensionContext): Promise<void> {
   await context.globalState.update(STATE_KEYS.activeManagedWallpaperId, undefined);
-  await vscode.workspace
-    .getConfiguration(CONFIGURATION_SECTION)
-    .update('projectDirectory', undefined, vscode.ConfigurationTarget.Global);
+  await context.globalState.update(STATE_KEYS.externalProjectDirectory, undefined);
 }
 
 export async function loadConfiguredWallpaperProject(
@@ -82,7 +73,7 @@ export async function loadConfiguredWallpaperProject(
   };
 }
 
-export async function migrateLegacySettings(): Promise<void> {
+export async function migrateLegacySettings(context: vscode.ExtensionContext): Promise<void> {
   const settings = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
   const currentOpacity = settings.inspect<number | null>('wallpaperOpacity');
   const legacyOpacity = settings.inspect<number>('opacity');
@@ -98,6 +89,26 @@ export async function migrateLegacySettings(): Promise<void> {
   if (legacyOpacity?.globalValue !== undefined) {
     await settings.update('opacity', undefined, vscode.ConfigurationTarget.Global);
   }
+
+  const legacyProjectDirectory = settings.inspect<string>('projectDirectory')?.globalValue?.trim();
+  if (legacyProjectDirectory
+    && !context.globalState.get<string>(STATE_KEYS.externalProjectDirectory)
+    && !getActiveManagedWallpaperId(context)) {
+    await context.globalState.update(
+      STATE_KEYS.externalProjectDirectory,
+      legacyProjectDirectory
+    );
+  }
+  await settings.update(
+    'projectDirectory',
+    undefined,
+    vscode.ConfigurationTarget.Global
+  ).then(undefined, () => undefined);
+  await settings.update(
+    'libraryDirectory',
+    undefined,
+    vscode.ConfigurationTarget.Global
+  ).then(undefined, () => undefined);
 }
 
 function optionalNumber(value: number | null): number | undefined {

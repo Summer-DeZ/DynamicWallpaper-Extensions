@@ -2,7 +2,7 @@
   "name": "dynamic-wallpaper-engine",
   "displayName": "Dynamic Wallpaper Renderer",
   "description": "A configurable multi-layer dynamic wallpaper renderer for VS Code.",
-  "version": "0.7.0",
+  "version": "1.0.0",
   "publisher": "Summer-DeZ",
   "author": {
     "name": "Summer-DeZ",
@@ -17,7 +17,8 @@
     "url": "https://github.com/Summer-DeZ/DynamicWallpaper-Extensions/issues"
   },
   "license": "GPL-2.0-only",
-  "preview": true,
+  "icon": "media/icon.png",
+  "preview": false,
   "pricing": "Free",
   "engines": {
     "vscode": "^1.96.0"
@@ -45,18 +46,7 @@
     "animated"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:dynamicWallpaper.selectFolder",
-    "onCommand:dynamicWallpaper.createProject",
-    "onCommand:dynamicWallpaper.importWallpaperEngine",
-    "onCommand:dynamicWallpaper.selectImportedWallpaper",
-    "onCommand:dynamicWallpaper.openWallpaperLibrary",
-    "onCommand:dynamicWallpaper.exportImportedWallpaper",
-    "onCommand:dynamicWallpaper.deleteImportedWallpaper",
-    "onCommand:dynamicWallpaper.apply",
-    "onCommand:dynamicWallpaper.restore",
-    "onCommand:dynamicWallpaper.preferHighPerformanceGpu",
-    "onCommand:dynamicWallpaper.useSystemGpuPreference"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -106,6 +96,20 @@
         "title": "Dynamic Wallpaper: 恢复系统 GPU 默认设置"
       }
     ],
+    "menus": {
+      "extension/context": [
+        {
+          "command": "dynamicWallpaper.importWallpaperEngine",
+          "group": "2_configure@1",
+          "when": "extension == summer-dez.dynamic-wallpaper-engine && extensionStatus == installed"
+        },
+        {
+          "command": "dynamicWallpaper.openWallpaperLibrary",
+          "group": "2_configure@2",
+          "when": "extension == summer-dez.dynamic-wallpaper-engine && extensionStatus == installed"
+        }
+      ]
+    },
     "jsonValidation": [
       {
         "fileMatch": "**/wallpaper.json",
@@ -115,18 +119,6 @@
     "configuration": {
       "title": "Dynamic Wallpaper",
       "properties": {
-        "dynamicWallpaper.projectDirectory": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "外部壁纸工程文件夹。由插件管理的导入壁纸不会把绝对路径写入此设置。"
-        },
-        "dynamicWallpaper.libraryDirectory": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "导入壁纸的自定义库目录，必须是绝对路径。留空时使用扩展的 globalStorageUri。"
-        },
         "dynamicWallpaper.wallpaperOpacity": {
           "type": [
             "number",
@@ -135,7 +127,8 @@
           "minimum": 0,
           "maximum": 1,
           "default": null,
-          "description": "全局壁纸可见强度。null 跟随 wallpaper.json；0 完全隐藏；1 完全显示。修改后会提示应用并重载窗口。"
+          "order": 1,
+          "description": "壁纸透明度（0–1）。"
         },
         "dynamicWallpaper.playbackRate": {
           "type": [
@@ -145,12 +138,14 @@
           "minimum": 0.25,
           "maximum": 4,
           "default": null,
-          "description": "全局视频播放速度。null 跟随 wallpaper.json；有效范围为 0.25–4。修改后会提示应用并重载窗口。"
+          "order": 2,
+          "description": "视频播放速度（0.25–4）。"
         },
         "dynamicWallpaper.preferHighPerformanceGpu": {
           "type": "boolean",
           "default": true,
-          "description": "应用壁纸时，将当前 VS Code 可执行文件登记为 Windows 高性能 GPU 应用。"
+          "order": 3,
+          "description": "让 VS Code 在 Windows 中优先使用高性能 GPU。"
         }
       }
     }

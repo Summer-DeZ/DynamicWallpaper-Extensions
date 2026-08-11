@@ -1,52 +1,27 @@
 # Dynamic Wallpaper Renderer
 
-为 Windows 桌面版 VS Code 添加图片、视频、网页或渐变动态壁纸，也可导入 Wallpaper Engine
-工程。运行时不依赖 Steam 或 Wallpaper Engine。
-
-> 插件通过修改 Workbench HTML 实现，这不是 VS Code 官方扩展 API。VS Code 更新后可能需要
-> 重新执行“应用并重启”。
+为 Windows 版 VS Code 设置图片、视频、网页或渐变动态壁纸，并支持导入 Wallpaper Engine
+工程。使用时不需要运行 Steam 或 Wallpaper Engine。
 
 ## 使用
 
 1. 安装 VSIX。
-2. 打开命令面板，选择一种方式：
-   - `Dynamic Wallpaper: 选择壁纸文件夹`：选择包含 `wallpaper.json` 的现有工程。
-   - `Dynamic Wallpaper: 导入 Wallpaper Engine 工程`：选择包含 `project.json` 的工程。
-   - `Dynamic Wallpaper: 创建示例壁纸工程`：创建一个渐变示例。
-3. 运行 `Dynamic Wallpaper: 应用并重启`。
+2. 在扩展列表中打开本扩展的齿轮菜单，选择“导入 Wallpaper Engine 工程”。
+3. 导入完成后，运行 `Dynamic Wallpaper: 应用并重启`。
 
-支持视频、图片、本地 Web 页面和动态渐变。Wallpaper Engine 的 Web、Video 工程可直接转换；
-Scene 会保留图层顺序、父子坐标、常见动效和粒子。Puppet 使用分层动态近似，文字、任意脚本及
-自定义着色器不转换，详情写入转换报告。
+也可以通过命令面板选择现有壁纸工程或创建渐变示例。
 
-## 壁纸库
+Wallpaper Engine 的 Web 和 Video 工程可直接转换。Scene 和 Puppet 工程会尽量保留图层、
+动画和粒子效果；不支持的脚本、文字和自定义着色器会跳过，并记录在转换报告中。
 
-导入结果默认保存在 VS Code 为扩展提供的 `globalStorageUri` 中，不会写入插件安装包或 Steam
-源目录。可通过以下命令选择、打开、导出或删除已导入壁纸：
+## 壁纸管理
 
-- `Dynamic Wallpaper: 选择已导入壁纸`
-- `Dynamic Wallpaper: 打开壁纸库`
-- `Dynamic Wallpaper: 导出已导入壁纸`
-- `Dynamic Wallpaper: 删除已导入壁纸`
+通过命令面板可以选择、打开、导出或删除已导入壁纸。扩展齿轮菜单也提供“打开壁纸库”入口。
 
-若要使用固定位置，请设置绝对路径 `dynamicWallpaper.libraryDirectory`。导入和分发壁纸前，
-请自行确认素材许可。
+## 注意事项
 
-## 注意
-
-- 打开图片、视频或 PDF 时，编辑器区域默认恢复为不透明，避免内容与壁纸重叠。
-- 正常禁用或卸载前，请先运行 `Dynamic Wallpaper: 禁用并恢复 Workbench`。
-- `dynamicWallpaper.preferHighPerformanceGpu` 默认为 `true`。
-- `dynamicWallpaper.wallpaperOpacity`（`0–1`）和 `dynamicWallpaper.playbackRate`（`0.25–4`）
-  保存后会提示应用并重载窗口；`null` 表示跟随工程。
-- 壁纸工程格式由 `schemas/wallpaper.schema.json` 描述，相对资源路径以 `wallpaper.json` 所在目录为准。
-
-## 开发
-
-```powershell
-npm install
-npm run check
-npm run package
-```
+- VS Code 更新后，如果壁纸失效，请重新运行 `Dynamic Wallpaper: 应用并重启`。
+- 禁用或卸载扩展前，请先运行 `Dynamic Wallpaper: 禁用并恢复 Workbench`。
+- 导入或分发壁纸前，请确认素材许可。
 
 许可证：GPL-2.0-only。
