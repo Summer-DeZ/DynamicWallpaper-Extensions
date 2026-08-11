@@ -20,6 +20,7 @@ interface RawProject {
   performance?: unknown;
   layers?: unknown;
   effects?: unknown;
+  runtime?: unknown;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -56,8 +57,12 @@ export async function loadWallpaperProject(
     throw new Error(`壁纸工程 JSON 无法解析：${error instanceof Error ? error.message : String(error)}`);
   }
 
+  const projectDirectory = path.dirname(path.resolve(projectFile));
+  if (raw.version === 2) {
+    return loadRuntimeWallpaperProject(raw, projectFile, projectDirectory);
+  }
   if (raw.version !== 1) {
-    throw new Error('壁纸工程 version 必须为 1。');
+    throw new Error('壁纸工程 version 必须为 1 或 2。');
   }
   if (!Array.isArray(raw.layers) || raw.layers.length === 0) {
     throw new Error('壁纸工程至少需要一个 layers 项。');
@@ -66,7 +71,6 @@ export async function loadWallpaperProject(
     throw new Error('单个壁纸工程最多支持 64 个图层。');
   }
 
-  const projectDirectory = path.dirname(path.resolve(projectFile));
   const render = asObject(raw.render);
   const performance = normalizePerformance(asObject(raw.performance));
   const effects = asObject(raw.effects);
@@ -77,15 +81,109 @@ export async function loadWallpaperProject(
   );
 
   return {
+    runtime: {
+      protocolVersion: 1,
+      kind: 'native',
+      projectUri: toWorkbenchResourceUri(path.resolve(projectFile)),
+      networkHosts: [],
+      userProperties: {}
+    },
     renderLayer: enumValue(render.layer, ['front', 'behind'], 'front') ?? 'front',
     surfaceOpacity: numberValue(render.surfaceOpacity, 0.72, 0, 1),
     backgroundColor: colorValue(render.backgroundColor, '#000000'),
     pauseWhenUnfocused: booleanValue(render.pauseWhenUnfocused, true),
     opaqueEditorForMedia: booleanValue(render.opaqueEditorForMedia, true),
+    opaqueEditorFileTypes: [],
     sceneCanvas: normalizeSceneCanvas(render.sceneCanvas),
     performance,
     layers,
     effects: normalizeEffects(effects)
+  };
+}
+
+async function loadRuntimeWallpaperProject(
+  raw: RawProject,
+  projectFile: string,
+  projectDirectory: string
+): Promise<RendererConfiguration> {
+  const runtime = asObject(raw.runtime);
+  const kind = enumValue(
+    runtime.kind,
+    ['wallpaper-engine-scene', 'wallpaper-engine-web', 'wallpaper-engine-video'] as const,
+    undefined
+  );
+  if (!kind) throw new Error('version 2 工程缺少受支持的 runtime.kind。');
+  if (typeof runtime.manifest !== 'string' || !runtime.manifest.trim()) {
+    throw new Error('version 2 工程缺少 runtime.manifest。');
+  }
+  const manifestFile = path.resolve(projectDirectory, runtime.manifest);
+  if (!(await fs.stat(manifestFile).catch(() => undefined))?.isFile()) {
+    throw new Error(`runtime manifest 不存在：${manifestFile}`);
+  }
+  const manifest = await readRuntimeManifestIdentity(manifestFile);
+  if (manifest.formatVersion !== 1 || manifest.kind !== kind) {
+    throw new Error('runtime manifest 的版本或类型与 wallpaper.json 不匹配。');
+  }
+  const reportFile = typeof runtime.report === 'string'
+    ? path.resolve(projectDirectory, runtime.report)
+    : undefined;
+  const networkHosts = Array.isArray(runtime.networkHosts)
+    ? runtime.networkHosts.filter((value): value is string =>
+      typeof value === 'string' && /^[a-z0-9.-]+$/i.test(value)
+    )
+    : [];
+  const render = asObject(raw.render);
+  const performance = normalizePerformance(asObject(raw.performance));
+  return {
+    runtime: {
+      protocolVersion: 1,
+      kind,
+      projectUri: toWorkbenchResourceUri(path.resolve(projectFile)),
+      manifestUri: toWorkbenchResourceUri(manifestFile),
+      reportUri: reportFile ? toWorkbenchResourceUri(reportFile) : undefined,
+      networkHosts,
+      userProperties: {}
+    },
+    renderLayer: enumValue(render.layer, ['front', 'behind'], 'front') ?? 'front',
+    surfaceOpacity: numberValue(render.surfaceOpacity, 0.72, 0, 1),
+    backgroundColor: colorValue(render.backgroundColor, '#000000'),
+    pauseWhenUnfocused: booleanValue(render.pauseWhenUnfocused, true),
+    opaqueEditorForMedia: booleanValue(render.opaqueEditorForMedia, true),
+    opaqueEditorFileTypes: [],
+    sceneCanvas: normalizeSceneCanvas(render.sceneCanvas),
+    performance,
+    layers: [],
+    effects: normalizeEffects(asObject(raw.effects))
+  };
+}
+
+async function readRuntimeManifestIdentity(manifestFile: string): Promise<{
+  formatVersion?: unknown;
+  kind?: unknown;
+}> {
+  // Importer-generated manifests put these two fields first. Reading a small
+  // prefix avoids parsing a multi-megabyte embedded Scene in the extension
+  // host on every startup; non-canonical manifests retain the full fallback.
+  const handle = await fs.open(manifestFile, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(4_096);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const prefix = buffer.toString('utf8', 0, bytesRead).replace(/^\uFEFF/, '');
+    const canonicalHeader = prefix.match(
+      /^\s*\{\s*"formatVersion"\s*:\s*(\d+)\s*,\s*"kind"\s*:\s*"([^"]+)"/
+    );
+    if (canonicalHeader) {
+      return {
+        formatVersion: Number(canonicalHeader[1]),
+        kind: canonicalHeader[2]
+      };
+    }
+  } finally {
+    await handle.close();
+  }
+  return JSON.parse(await fs.readFile(manifestFile, 'utf8')) as {
+    formatVersion?: unknown;
+    kind?: unknown;
   };
 }
 
@@ -307,6 +405,7 @@ function normalizePerformance(performance: JsonObject): RendererPerformance {
       ['quality', 'balanced', 'economy'],
       'balanced'
     ) ?? 'balanced',
+    maxFps: Math.round(numberValue(performance.maxFps, 60, 15, 60)),
     suspendAfterSeconds: numberValue(performance.suspendAfterSeconds, 15, 0, 3600)
   };
 }

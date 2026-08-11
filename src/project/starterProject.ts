@@ -11,6 +11,7 @@ export function createStarterProject(): string {
     },
     performance: {
       profile: 'balanced',
+      maxFps: 60,
       suspendAfterSeconds: 15
     },
     layers: [

@@ -5,6 +5,12 @@ import { WallpaperEngineProjectType } from '../importers/wallpaperEngine/project
 
 export const WALLPAPER_LIBRARY_DIRECTORY_NAME = 'wallpapers';
 export const WALLPAPER_LIBRARY_INDEX_FILE_NAME = 'library.json';
+const WALLPAPER_LIBRARY_BACKUP_FILE_NAME = `${WALLPAPER_LIBRARY_INDEX_FILE_NAME}.backup`;
+const WALLPAPER_LIBRARY_LOCK_FILE_NAME = '.library.lock';
+const LOCK_STALE_AFTER_MS = 15_000;
+const LOCK_WAIT_TIMEOUT_MS = 20_000;
+const IMPORT_BACKUP_STALE_AFTER_MS = 5_000;
+const libraryOperationQueues = new Map<string, Promise<void>>();
 
 export interface ManagedWallpaperIdentity {
   title: string;
@@ -19,10 +25,14 @@ export interface ManagedWallpaperEntry {
   relativeDirectory: string;
   importedAt: string;
   updatedAt: string;
+  runtimeFormatVersion: number;
+  sourceVersion?: number;
+  compatibilityStatus: 'compatible' | 'partial' | 'incompatible' | 'legacy';
+  networkHosts: string[];
 }
 
 export interface WallpaperLibraryCatalog {
-  formatVersion: 1;
+  formatVersion: 2;
   updatedAt: string;
   wallpapers: ManagedWallpaperEntry[];
 }
@@ -33,6 +43,10 @@ export interface ManagedWallpaperEntryInput {
   sourceType: WallpaperEngineProjectType;
   sourceDirectory: string;
   updatedAt?: string;
+  runtimeFormatVersion?: number;
+  sourceVersion?: number;
+  compatibilityStatus?: ManagedWallpaperEntry['compatibilityStatus'];
+  networkHosts?: string[];
 }
 
 export function createManagedWallpaperId(
@@ -70,30 +84,57 @@ export async function ensureWallpaperLibrary(libraryDirectory: string): Promise<
 export async function readWallpaperLibraryCatalog(
   libraryDirectory: string
 ): Promise<WallpaperLibraryCatalog> {
+  return withLibraryLock(
+    libraryDirectory,
+    () => readWallpaperLibraryCatalogUnlocked(libraryDirectory)
+  );
+}
+
+async function readWallpaperLibraryCatalogUnlocked(
+  libraryDirectory: string
+): Promise<WallpaperLibraryCatalog> {
   const indexFile = wallpaperLibraryIndexFile(libraryDirectory);
-  let rawText: string;
+  const backupFile = path.join(path.resolve(libraryDirectory), WALLPAPER_LIBRARY_BACKUP_FILE_NAME);
+  let primaryError: unknown;
   try {
-    rawText = await fs.readFile(indexFile, 'utf8');
+    return parseWallpaperLibraryCatalog(await fs.readFile(indexFile, 'utf8'), indexFile);
   } catch (error) {
-    if (isNodeError(error, 'ENOENT')) {
-      return emptyCatalog();
-    }
-    throw error;
+    primaryError = error;
   }
 
+  try {
+    const recovered = parseWallpaperLibraryCatalog(
+      await fs.readFile(backupFile, 'utf8'),
+      backupFile
+    );
+    await fs.copyFile(backupFile, indexFile);
+    await fs.rm(backupFile, { force: true }).catch(() => undefined);
+    return recovered;
+  } catch (backupError) {
+    if (isNodeError(primaryError, 'ENOENT') && isNodeError(backupError, 'ENOENT')) {
+      return emptyCatalog();
+    }
+    throw primaryError;
+  }
+}
+
+function parseWallpaperLibraryCatalog(
+  rawText: string,
+  indexFile: string
+): WallpaperLibraryCatalog {
   let raw: unknown;
   try {
     raw = JSON.parse(rawText);
   } catch {
     throw new Error(`壁纸库索引无法解析：${indexFile}`);
   }
-  if (!isRecord(raw) || raw.formatVersion !== 1 || !Array.isArray(raw.wallpapers)) {
+  if (!isRecord(raw) || (raw.formatVersion !== 1 && raw.formatVersion !== 2) || !Array.isArray(raw.wallpapers)) {
     throw new Error(`壁纸库索引格式无效：${indexFile}`);
   }
 
   const wallpapers = raw.wallpapers.map((entry, index) => parseCatalogEntry(entry, indexFile, index));
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
     wallpapers: wallpapers.sort(compareEntries)
   };
@@ -105,6 +146,7 @@ export async function listExistingManagedWallpapers(
   const catalog = await readWallpaperLibraryCatalog(libraryDirectory);
   const existing: ManagedWallpaperEntry[] = [];
   for (const entry of catalog.wallpapers) {
+    await recoverInterruptedManagedWallpaper(libraryDirectory, entry.id);
     const projectFile = path.join(
       managedWallpaperDirectory(libraryDirectory, entry.id),
       'wallpaper.json'
@@ -113,11 +155,51 @@ export async function listExistingManagedWallpapers(
       if ((await fs.stat(projectFile)).isFile()) {
         existing.push(entry);
       }
-    } catch {
-      // A stale catalog entry is hidden until the same source is imported again.
+    } catch (error) {
+      if (!isNodeError(error, 'ENOENT') && !isNodeError(error, 'ENOTDIR')) throw error;
+      // A genuinely missing catalog entry is hidden until the same source is imported again.
     }
   }
   return existing;
+}
+
+async function recoverInterruptedManagedWallpaper(
+  libraryDirectory: string,
+  wallpaperId: string
+): Promise<void> {
+  const projectDirectory = managedWallpaperDirectory(libraryDirectory, wallpaperId);
+  if (await fs.stat(projectDirectory).then(stat => stat.isDirectory(), () => false)) return;
+  const backupPrefix = `.${wallpaperId}.backup-`;
+  const candidates = await fs.readdir(path.resolve(libraryDirectory), { withFileTypes: true })
+    .then(entries => entries.filter(entry => entry.isDirectory() && entry.name.startsWith(backupPrefix)))
+    .catch(error => {
+      if (isNodeError(error, 'ENOENT')) return [];
+      throw error;
+    });
+  const recoverable = (await Promise.all(candidates.map(async entry => {
+    const directory = path.join(path.resolve(libraryDirectory), entry.name);
+    const projectFile = path.join(directory, 'wallpaper.json');
+    const stats = await fs.stat(projectFile).catch(() => undefined);
+    const backupTimestamp = Number.parseInt(
+      entry.name.slice(backupPrefix.length).match(/^\d+-(\d+)/)?.[1] ?? '',
+      10
+    );
+    return stats?.isFile()
+      && Number.isFinite(backupTimestamp)
+      && Date.now() - backupTimestamp >= IMPORT_BACKUP_STALE_AFTER_MS
+      ? { directory, modified: backupTimestamp }
+      : undefined;
+  }))).filter((value): value is { directory: string; modified: number } => value !== undefined)
+    .sort((left, right) => right.modified - left.modified);
+  for (const candidate of recoverable) {
+    try {
+      await fs.rename(candidate.directory, projectDirectory);
+      return;
+    } catch (error) {
+      if (isNodeError(error, 'EEXIST')) return;
+      if (!isNodeError(error, 'ENOENT')) throw error;
+    }
+  }
 }
 
 export async function upsertManagedWallpaper(
@@ -125,23 +207,28 @@ export async function upsertManagedWallpaper(
   input: ManagedWallpaperEntryInput
 ): Promise<ManagedWallpaperEntry> {
   assertWallpaperId(input.id);
-  await ensureWallpaperLibrary(libraryDirectory);
-  const catalog = await readWallpaperLibraryCatalog(libraryDirectory);
-  const existing = catalog.wallpapers.find(entry => entry.id === input.id);
-  const updatedAt = input.updatedAt ?? new Date().toISOString();
-  const entry: ManagedWallpaperEntry = {
-    id: input.id,
-    title: input.title,
-    sourceType: input.sourceType,
-    sourceDirectory: path.resolve(input.sourceDirectory),
-    relativeDirectory: input.id,
-    importedAt: existing?.importedAt ?? updatedAt,
-    updatedAt
-  };
-  const wallpapers = catalog.wallpapers.filter(item => item.id !== input.id);
-  wallpapers.push(entry);
-  await writeWallpaperLibraryCatalog(libraryDirectory, wallpapers);
-  return entry;
+  return withLibraryLock(libraryDirectory, async () => {
+    const catalog = await readWallpaperLibraryCatalogUnlocked(libraryDirectory);
+    const existing = catalog.wallpapers.find(entry => entry.id === input.id);
+    const updatedAt = input.updatedAt ?? new Date().toISOString();
+    const entry: ManagedWallpaperEntry = {
+      id: input.id,
+      title: input.title,
+      sourceType: input.sourceType,
+      sourceDirectory: path.resolve(input.sourceDirectory),
+      relativeDirectory: input.id,
+      importedAt: existing?.importedAt ?? updatedAt,
+      updatedAt,
+      runtimeFormatVersion: input.runtimeFormatVersion ?? existing?.runtimeFormatVersion ?? 1,
+      sourceVersion: input.sourceVersion ?? existing?.sourceVersion,
+      compatibilityStatus: input.compatibilityStatus ?? existing?.compatibilityStatus ?? 'legacy',
+      networkHosts: input.networkHosts ?? existing?.networkHosts ?? []
+    };
+    const wallpapers = catalog.wallpapers.filter(item => item.id !== input.id);
+    wallpapers.push(entry);
+    await writeWallpaperLibraryCatalogUnlocked(libraryDirectory, wallpapers);
+    return entry;
+  });
 }
 
 export async function removeManagedWallpaperFromCatalog(
@@ -149,63 +236,143 @@ export async function removeManagedWallpaperFromCatalog(
   wallpaperId: string
 ): Promise<void> {
   assertWallpaperId(wallpaperId);
-  const catalog = await readWallpaperLibraryCatalog(libraryDirectory);
-  await writeWallpaperLibraryCatalog(
-    libraryDirectory,
-    catalog.wallpapers.filter(entry => entry.id !== wallpaperId)
-  );
+  await withLibraryLock(libraryDirectory, async () => {
+    const catalog = await readWallpaperLibraryCatalogUnlocked(libraryDirectory);
+    await writeWallpaperLibraryCatalogUnlocked(
+      libraryDirectory,
+      catalog.wallpapers.filter(entry => entry.id !== wallpaperId)
+    );
+  });
 }
 
 function wallpaperLibraryIndexFile(libraryDirectory: string): string {
   return path.join(path.resolve(libraryDirectory), WALLPAPER_LIBRARY_INDEX_FILE_NAME);
 }
 
-async function writeWallpaperLibraryCatalog(
+async function writeWallpaperLibraryCatalogUnlocked(
   libraryDirectory: string,
   wallpapers: ManagedWallpaperEntry[]
 ): Promise<void> {
   await ensureWallpaperLibrary(libraryDirectory);
   const updatedAt = new Date().toISOString();
   const catalog: WallpaperLibraryCatalog = {
-    formatVersion: 1,
+    formatVersion: 2,
     updatedAt,
     wallpapers: [...wallpapers].sort(compareEntries)
   };
   const indexFile = wallpaperLibraryIndexFile(libraryDirectory);
   const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const temporaryFile = `${indexFile}.${nonce}.tmp`;
-  const backupFile = `${indexFile}.${nonce}.backup`;
-  let movedExistingIndex = false;
+  const backupFile = path.join(path.resolve(libraryDirectory), WALLPAPER_LIBRARY_BACKUP_FILE_NAME);
+  let backedUpExistingIndex = false;
   let installedNewIndex = false;
-  await fs.writeFile(temporaryFile, `${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
+  const temporaryHandle = await fs.open(temporaryFile, 'wx');
+  try {
+    await temporaryHandle.writeFile(`${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
+    await temporaryHandle.sync();
+  } finally {
+    await temporaryHandle.close();
+  }
   try {
     try {
-      await fs.rename(indexFile, backupFile);
-      movedExistingIndex = true;
+      await fs.copyFile(indexFile, backupFile);
+      backedUpExistingIndex = true;
     } catch (error) {
       if (!isNodeError(error, 'ENOENT')) {
         throw error;
       }
     }
+    // Windows cannot rename over an existing file. Readers share the lock,
+    // while the durable backup makes this replacement window crash-safe.
+    await fs.rm(indexFile, { force: true });
     await fs.rename(temporaryFile, indexFile);
     installedNewIndex = true;
-    if (movedExistingIndex) {
-      movedExistingIndex = false;
-      await fs.rm(backupFile, { force: true }).catch(() => undefined);
-    }
+    await fs.rm(backupFile, { force: true }).catch(() => undefined);
+    backedUpExistingIndex = false;
   } catch (error) {
-    if (movedExistingIndex && !installedNewIndex) {
-      await fs.rename(backupFile, indexFile).catch(() => undefined);
-      movedExistingIndex = false;
+    if (backedUpExistingIndex && !installedNewIndex) {
+      await fs.copyFile(backupFile, indexFile).catch(() => undefined);
     }
     throw error;
   } finally {
     if (!installedNewIndex) {
       await fs.rm(temporaryFile, { force: true }).catch(() => undefined);
     }
-    if (movedExistingIndex) {
-      await fs.rm(backupFile, { force: true }).catch(() => undefined);
+    if (installedNewIndex) await fs.rm(backupFile, { force: true }).catch(() => undefined);
+  }
+}
+
+async function withLibraryLock<T>(
+  libraryDirectory: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const libraryRoot = path.resolve(libraryDirectory);
+  const previous = libraryOperationQueues.get(libraryRoot) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(async () => {
+    const releaseFileLock = await acquireLibraryFileLock(libraryRoot);
+    try {
+      return await operation();
+    } finally {
+      await releaseFileLock();
     }
+  });
+  const tail = current.then(() => undefined, () => undefined);
+  libraryOperationQueues.set(libraryRoot, tail);
+  try {
+    return await current;
+  } finally {
+    if (libraryOperationQueues.get(libraryRoot) === tail) {
+      libraryOperationQueues.delete(libraryRoot);
+    }
+  }
+}
+
+async function acquireLibraryFileLock(libraryRoot: string): Promise<() => Promise<void>> {
+  await ensureWallpaperLibrary(libraryRoot);
+  const lockFile = path.join(libraryRoot, WALLPAPER_LIBRARY_LOCK_FILE_NAME);
+  const deadline = Date.now() + LOCK_WAIT_TIMEOUT_MS;
+  let delayMs = 10;
+  for (;;) {
+    try {
+      const handle = await fs.open(lockFile, 'wx');
+      try {
+        await handle.writeFile(`${process.pid} ${new Date().toISOString()}\n`, 'utf8');
+      } catch (error) {
+        await handle.close().catch(() => undefined);
+        await fs.rm(lockFile, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      return async () => {
+        await handle.close().catch(() => undefined);
+        await fs.rm(lockFile, { force: true }).catch(() => undefined);
+      };
+    } catch (error) {
+      if (!isNodeError(error, 'EEXIST')) throw error;
+      const lockStat = await fs.stat(lockFile).catch(() => undefined);
+      const lockOwner = Number.parseInt(
+        await fs.readFile(lockFile, 'utf8').catch(() => ''),
+        10
+      );
+      if ((Number.isInteger(lockOwner) && !isProcessAlive(lockOwner))
+        || (lockStat && Date.now() - lockStat.mtimeMs >= LOCK_STALE_AFTER_MS)) {
+        await fs.rm(lockFile, { force: true }).catch(() => undefined);
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`等待壁纸库锁超时：${lockFile}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      delayMs = Math.min(100, delayMs * 2);
+    }
+  }
+}
+
+function isProcessAlive(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return !isNodeError(error, 'ESRCH');
   }
 }
 
@@ -235,7 +402,13 @@ function parseCatalogEntry(
     sourceDirectory: raw.sourceDirectory,
     relativeDirectory: raw.relativeDirectory,
     importedAt: raw.importedAt,
-    updatedAt: raw.updatedAt
+    updatedAt: raw.updatedAt,
+    runtimeFormatVersion: typeof raw.runtimeFormatVersion === 'number' ? raw.runtimeFormatVersion : 0,
+    sourceVersion: typeof raw.sourceVersion === 'number' ? raw.sourceVersion : undefined,
+    compatibilityStatus: isCompatibilityStatus(raw.compatibilityStatus) ? raw.compatibilityStatus : 'legacy',
+    networkHosts: Array.isArray(raw.networkHosts)
+      ? raw.networkHosts.filter((host): host is string => typeof host === 'string')
+      : []
   };
 }
 
@@ -269,7 +442,7 @@ function compareEntries(left: ManagedWallpaperEntry, right: ManagedWallpaperEntr
 
 function emptyCatalog(): WallpaperLibraryCatalog {
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     updatedAt: new Date(0).toISOString(),
     wallpapers: []
   };
@@ -281,6 +454,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isWallpaperEngineProjectType(value: unknown): value is WallpaperEngineProjectType {
   return value === 'Scene' || value === 'Web' || value === 'Video';
+}
+
+function isCompatibilityStatus(value: unknown): value is ManagedWallpaperEntry['compatibilityStatus'] {
+  return value === 'compatible' || value === 'partial' || value === 'incompatible' || value === 'legacy';
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {

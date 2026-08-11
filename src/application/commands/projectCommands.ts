@@ -7,7 +7,7 @@ import {
   applyWorkbenchPatch,
   removeWorkbenchPatch
 } from '../../platform/workbench/workbenchPatch';
-import { COMMANDS, CONFIGURATION_SECTION, PROJECT_FILE_NAME, STATE_KEYS } from '../constants';
+import { CONFIGURATION_SECTION, PROJECT_FILE_NAME, STATE_KEYS } from '../constants';
 import { showOperationError } from '../errors';
 import {
   getProjectDirectory,
@@ -66,7 +66,8 @@ export async function createProjectFolder(context: vscode.ExtensionContext): Pro
 export async function applyWallpaper(
   context: vscode.ExtensionContext,
   reloadAutomatically = false
-): Promise<void> {
+): Promise<boolean> {
+  let gpuWarning = '';
   try {
     const projectDirectory = getProjectDirectory(context);
     if (!projectDirectory) {
@@ -74,13 +75,13 @@ export async function applyWallpaper(
     }
 
     const renderConfiguration = await loadConfiguredWallpaperProject(
-      projectFileFor(projectDirectory)
+      projectFileFor(projectDirectory),
+      context
     );
     await applyWorkbenchPatch(vscode.env.appRoot, renderConfiguration);
     await context.globalState.update(STATE_KEYS.workbenchPatchEnabled, true);
 
     const configuration = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
-    let gpuWarning = '';
     if (configuration.get<boolean>('preferHighPerformanceGpu', true)) {
       try {
         await setHighPerformanceGpu(context, false);
@@ -89,9 +90,15 @@ export async function applyWallpaper(
       }
     }
 
+  } catch (error) {
+    showOperationError('应用动态壁纸失败', error);
+    return false;
+  }
+
+  try {
     if (reloadAutomatically) {
       await vscode.commands.executeCommand('workbench.action.reloadWindow');
-      return;
+      return true;
     }
 
     const action = await vscode.window.showInformationMessage(
@@ -102,8 +109,12 @@ export async function applyWallpaper(
       await vscode.commands.executeCommand('workbench.action.reloadWindow');
     }
   } catch (error) {
-    showOperationError('应用动态壁纸失败', error);
+    // The patch and persisted selection are already committed.  Keep them in
+    // sync and let the user retry a normal window reload instead of rolling
+    // the selection back to a project that is no longer injected.
+    showOperationError('壁纸已应用，但自动重载窗口失败', error);
   }
+  return true;
 }
 
 export async function restoreWorkbench(context: vscode.ExtensionContext): Promise<void> {
@@ -162,6 +173,6 @@ async function saveProjectDirectoryAndOfferApply(
     '稍后'
   );
   if (action === '应用并重启') {
-    await vscode.commands.executeCommand(COMMANDS.apply);
+    await applyWallpaper(context, true);
   }
 }

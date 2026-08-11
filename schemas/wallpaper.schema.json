@@ -5,12 +5,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version",
-    "layers"
+    "version"
   ],
   "properties": {
     "version": {
-      "const": 1,
+      "enum": [1, 2],
       "description": "壁纸工程格式版本。"
     },
     "name": {
@@ -76,6 +75,13 @@
           "default": "balanced",
           "description": "quality 保留全部效果；balanced 默认降低持续开销；economy 禁用高成本装饰动画。"
         },
+        "maxFps": {
+          "type": "number",
+          "minimum": 15,
+          "maximum": 60,
+          "default": 60,
+          "description": "运行时最大帧率；降低到 30 可显著减少持续 GPU 占用。"
+        },
         "suspendAfterSeconds": {
           "type": "number",
           "minimum": 0,
@@ -95,8 +101,43 @@
     },
     "effects": {
       "$ref": "#/$defs/effects"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "manifest"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "wallpaper-engine-scene",
+            "wallpaper-engine-web",
+            "wallpaper-engine-video"
+          ]
+        },
+        "manifest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "内部版本化运行时清单；完整 Wallpaper Engine 私有结构不属于公共 schema。"
+        },
+        "report": { "type": "string", "minLength": 1 },
+        "networkHosts": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+          "uniqueItems": true
+        }
+      }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "version": { "const": 1 } } },
+      "then": { "required": ["layers"] }
+    },
+    {
+      "if": { "properties": { "version": { "const": 2 } } },
+      "then": { "required": ["runtime"] }
+    }
+  ],
   "$defs": {
     "filters": {
       "type": "object",

@@ -14,7 +14,8 @@ import {
 } from '../../project/wallpaperLibrary';
 import { COMMANDS } from '../constants';
 import { getWallpaperLibraryDirectory } from '../libraryStorage';
-import { loadConfiguredWallpaperProject, selectManagedWallpaper } from '../settings';
+import { loadConfiguredWallpaperProject } from '../settings';
+import { selectImportedWallpaper } from './libraryCommands';
 
 export async function importWallpaperEngine(
   context: vscode.ExtensionContext,
@@ -81,22 +82,28 @@ export async function importWallpaperEngine(
       id: wallpaperId,
       title: result.title,
       sourceType: result.sourceType,
-      sourceDirectory: result.sourceDirectory
+      sourceDirectory: result.sourceDirectory,
+      runtimeFormatVersion: 1,
+      sourceVersion: sourceProject.version,
+      compatibilityStatus: result.warnings.length > 0 ? 'partial' : 'compatible',
+      networkHosts: []
     });
-    await selectManagedWallpaper(context, wallpaperId);
     output.appendLine(`转换完成：${result.outputDirectory}`);
     for (const warning of result.warnings) {
       output.appendLine(`注意：${warning}`);
     }
 
     const action = await vscode.window.showInformationMessage(
-      `已转换“${result.title}”，并设为当前壁纸工程。`,
-      '应用并重启',
+      `已将“${result.title}”导入壁纸库。`,
+      '立即切换',
+      '继续导入',
       '打开文件夹',
       '查看转换报告'
     );
-    if (action === '应用并重启') {
-      await vscode.commands.executeCommand(COMMANDS.apply);
+    if (action === '立即切换') {
+      await selectImportedWallpaper(context, wallpaperId);
+    } else if (action === '继续导入') {
+      await vscode.commands.executeCommand(COMMANDS.importWallpaperEngine);
     } else if (action === '打开文件夹') {
       await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(result.outputDirectory));
     } else if (action === '查看转换报告') {

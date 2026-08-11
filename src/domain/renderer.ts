@@ -1,5 +1,22 @@
 export type RendererLayerType = 'video' | 'image' | 'web' | 'gradient' | 'particle';
 
+export type RendererRuntimeKind =
+  | 'native'
+  | 'wallpaper-engine-scene'
+  | 'wallpaper-engine-web'
+  | 'wallpaper-engine-video';
+
+export interface RendererRuntimeDescriptor {
+  protocolVersion: 1;
+  kind: RendererRuntimeKind;
+  projectUri?: string;
+  manifestUri?: string;
+  reportUri?: string;
+  stateUri?: string;
+  networkHosts: string[];
+  userProperties: Record<string, string | number | boolean | null>;
+}
+
 export type LayerMotionType =
   | 'none'
   | 'sway'
@@ -90,15 +107,18 @@ export interface RendererEffects {
 
 export interface RendererPerformance {
   profile: 'quality' | 'balanced' | 'economy';
+  maxFps: number;
   suspendAfterSeconds: number;
 }
 
 export interface RendererConfiguration {
+  runtime: RendererRuntimeDescriptor;
   renderLayer: 'front' | 'behind';
   surfaceOpacity: number;
   backgroundColor: string;
   pauseWhenUnfocused: boolean;
   opaqueEditorForMedia: boolean;
+  opaqueEditorFileTypes: string[];
   sceneCanvas?: {
     width: number;
     height: number;

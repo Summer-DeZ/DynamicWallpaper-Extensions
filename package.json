@@ -2,7 +2,7 @@
   "name": "dynamic-wallpaper-engine",
   "displayName": "Dynamic Wallpaper Renderer",
   "description": "A configurable multi-layer dynamic wallpaper renderer for VS Code.",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "publisher": "Summer-DeZ",
   "author": {
     "name": "Summer-DeZ",
@@ -65,11 +65,11 @@
       },
       {
         "command": "dynamicWallpaper.selectImportedWallpaper",
-        "title": "Dynamic Wallpaper: 选择已导入壁纸"
+        "title": "Dynamic Wallpaper: 浏览并切换壁纸库"
       },
       {
         "command": "dynamicWallpaper.openWallpaperLibrary",
-        "title": "Dynamic Wallpaper: 打开壁纸库"
+        "title": "Dynamic Wallpaper: 在资源管理器中打开壁纸库"
       },
       {
         "command": "dynamicWallpaper.exportImportedWallpaper",
@@ -88,6 +88,18 @@
         "title": "Dynamic Wallpaper: 禁用并恢复 Workbench"
       },
       {
+        "command": "dynamicWallpaper.openRuntimeProperties",
+        "title": "Dynamic Wallpaper: 打开壁纸用户属性"
+      },
+      {
+        "command": "dynamicWallpaper.openRuntimeDiagnostics",
+        "title": "Dynamic Wallpaper: 打开兼容性报告/运行时诊断"
+      },
+      {
+        "command": "dynamicWallpaper.manageRuntimeNetworkAccess",
+        "title": "Dynamic Wallpaper: 管理当前壁纸网络授权"
+      },
+      {
         "command": "dynamicWallpaper.preferHighPerformanceGpu",
         "title": "Dynamic Wallpaper: 将 VS Code 设为高性能 GPU"
       },
@@ -99,13 +111,18 @@
     "menus": {
       "extension/context": [
         {
-          "command": "dynamicWallpaper.importWallpaperEngine",
+          "command": "dynamicWallpaper.selectImportedWallpaper",
           "group": "2_configure@1",
           "when": "extension == summer-dez.dynamic-wallpaper-engine && extensionStatus == installed"
         },
         {
-          "command": "dynamicWallpaper.openWallpaperLibrary",
+          "command": "dynamicWallpaper.importWallpaperEngine",
           "group": "2_configure@2",
+          "when": "extension == summer-dez.dynamic-wallpaper-engine && extensionStatus == installed"
+        },
+        {
+          "command": "dynamicWallpaper.openWallpaperLibrary",
+          "group": "2_configure@3",
           "when": "extension == summer-dez.dynamic-wallpaper-engine && extensionStatus == installed"
         }
       ]
@@ -141,11 +158,50 @@
           "order": 2,
           "description": "视频播放速度（0.25–4）。"
         },
+        "dynamicWallpaper.maxFps": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 15,
+          "maximum": 60,
+          "default": null,
+          "order": 3,
+          "description": "统一运行时最大帧率（15–60）；null 使用工程设置，Wallpaper Engine 导入工程默认为 60。"
+        },
         "dynamicWallpaper.preferHighPerformanceGpu": {
           "type": "boolean",
           "default": true,
-          "order": 3,
+          "order": 4,
           "description": "让 VS Code 在 Windows 中优先使用高性能 GPU。"
+        },
+        "dynamicWallpaper.opaqueEditorFileTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\*?\\.?[A-Za-z0-9][A-Za-z0-9+_-]*$"
+          },
+          "uniqueItems": true,
+          "default": [
+            "pdf",
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "webp",
+            "bmp",
+            "ico",
+            "svg",
+            "avif"
+          ],
+          "order": 6,
+          "description": "打开这些扩展名的文件时，使对应编辑器区域完全不透明。扩展名不区分大小写，可写为 png、.png 或 *.png；设为空数组可关闭。"
+        },
+        "dynamicWallpaper.pauseWhenUnfocused": {
+          "type": "boolean",
+          "default": true,
+          "order": 5,
+          "description": "切换到其他应用或最小化 VS Code 时暂停壁纸的视频、音频、动画、脚本和 WebGL 更新；返回后自动恢复。"
         }
       }
     }
@@ -153,18 +209,33 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "clean:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "compile": "npm run clean:dist && tsc -p tsconfig.json",
+    "check:runtime": "tsc -p runtime-src/tsconfig.json",
+    "build:runtime": "npm run check:runtime && node scripts/runtime/build.js",
+    "compile": "npm run clean:dist && tsc -p tsconfig.json && npm run build:runtime",
     "watch": "tsc -w -p .",
     "check": "npm run compile",
+    "test": "vitest run",
+    "test:browser": "npm run build:runtime && playwright test",
     "verify:release": "node scripts/release/verifyContents.js",
     "prepare:release": "npm run check && npm run verify:release",
     "vscode:prepublish": "npm run prepare:release",
+    "vscode:uninstall": "node ./dist/uninstall.js",
     "package": "node scripts/release/package.js"
   },
   "devDependencies": {
-    "@types/node": "^22.15.0",
-    "@types/vscode": "^1.96.0",
-    "@vscode/vsce": "^3.6.0",
-    "typescript": "^5.8.3"
+    "@playwright/test": "1.62.1",
+    "@shaderfrog/glsl-parser": "7.0.1",
+    "@types/node": "22.20.1",
+    "@types/pngjs": "6.0.5",
+    "@types/three": "0.185.4",
+    "@types/vscode": "1.96.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0",
+    "quickjs-emscripten": "0.32.0",
+    "three": "0.185.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
   }
 }
